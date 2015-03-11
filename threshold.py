@@ -10,7 +10,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 import networkx as nx
 from scipy.optimize import brentq,bisect
-from scipy.linalg import eigvals
+#from scipy.linalg import eigvals
 
 class NetworkFormatError(Exception):
     def __init__(self, value):
@@ -25,263 +25,156 @@ class ThresholdError(Exception):
         self.value = value
     def __str__(self):
         return repr(self.value)
-##############
-##############
-##############
-
-def text_to_matrix_sparse (fname,N,dtype,weighted,directed): # transforms an edgelist into a list of csr_matrices
-    if directed:
-        G = nx.DiGraph()
-    else:
-        G = nx.Graph()
-    G.add_nodes_from( range(N) )
-    if weighted:
-        for line in open(fname):
-            azz = line.strip().split()
-            azz = map(int,azz)
-            G.add_edge(*azz[:2],weight=azz[3])
-        return csr_matrix( nx.adjacency_matrix(G,weight='weight') , dtype=dtype )
-    else:
-        for line in open(fname):
-            azz = line.strip().split()
-            azz = map(int,azz)
-            G.add_edge(*azz[:2])
-        return csr_matrix( nx.adjacency_matrix(G,weight=None) , dtype=dtype )
         
-def text_to_matrix_dense (fname,N,dtype,weighted,directed): # transforms an edgelist into a list of dense arrays
+        
+                      
+
+def text_to_net (fname,**kwargs):
+    if 'separator' in kwargs:
+        separator = kwargs['separator']
+    else:
+        separator = '\t'
+    #
+    if 'directed' in kwargs:
+        directed = kwargs['directed']
+    else:
+        directed = False
+    #
+    raw = open(fname).readlines() # read file
+    #
+    if len( raw[0].strip().split(separator) )>3: # is it weighted?
+        isw = True
+    else:
+        isw = False
+    #
+    snodes = set()
+    stimes = set()
+    for line in raw:
+        azz = line.strip().split(separator)
+        stimes.add( int(azz[-1]) )
+        snodes.add( azz[0] )
+        snodes.add( azz[1] )
+    N = len(snodes)
+    T = max(stimes)+1
+    #
     if directed:
-        G = nx.DiGraph()
+        lG = [ nx.DiGraph() for t in range(T) ]
     else:
-        G = nx.Graph()
-    G.add_nodes_from( range(N) )
-    if weighted:
-        for line in open(fname):
-            azz = line.strip().split()
-            azz = map(int,azz)
-            G.add_edge(*azz[:2],weight=azz[3])
-        return np.array( nx.to_numpy_matrix(G,weight='weight',dtype=dtype) )
+        lG = [ nx.Graph() for t in range(T) ]
+    #
+    # fill with edges
+    if isw:
+        for line in raw:
+            azz = line.strip().split(separator)
+            x,y,t = azz[0],azz[1],int(azz[-1])
+            lG[t].add_edge(x,y,weight=int(azz[2]))
     else:
-        for line in open(fname):
-            azz = line.strip().split()
-            azz = map(int,azz)
-            G.add_edge(*azz[:2])
-        return np.array( nx.to_numpy_matrix(G,weight=None,dtype=dtype) )
+        for line in raw:
+            azz = line.strip().split(separator)
+            x,y,t = azz[0],azz[1],int(azz[-1])
+            lG[t].add_edge(x,y)
+    #
+    # fill with all nodes
+    snodes = list(snodes)
+    for G in lG:
+        lG.add_nodes_from( snodes )
+    #
+    return lG,N,T # returns list of graphs and number of nodes
+    
 
+def graph_to_csr (lG,dtype):
+    lAs = []
+    for G in lG:
+        A = nx.adjacency_matrix(G)
+        lAs.append( csr_matrix( A,dtype=dtype ))
+    return lAs
+    
 
-
-###
-### supported formats:
-### '<dirtoname>/<name>_t_' and extension 'npy'
-### '<dirtoname>/<name>' and extension 'npz'
-### '<dirtoname>/<name>_t_' and extension 'txt' : edge list with columns separated by whitespace/tab, and id_out id_in weight
-### list of networkx graphs
-### list of dense arrays
-### list of sparse arrays
-###
-### directed=True is useful only if I give edge list and want to treat is as directed. Otherwise assumes matrices as they are, not looking if they are sym or not
-
+        
 class tnet:
-    lA = None
-    lA_sparse = None
+    lG = None
     T = None
     N = None
+    lA = None
     dtype = np.float64
     #
-    def __init__ (self, gimme, extension = 'npy', period = None,
-                  nodes = None, weighted = False, directed = False,
-                  priority = 'sparse', dtype=np.float64 , nodense = True ):
+    def __init__ (self, myn, period=None, dtype='float64', **kwargs ): # directed=False, separator='\t'
         #
-        self.weight = weighted
-        #          
-        if period != None:
-            self.T = period
+        if dtype != 'float64': # if different from this, set longer float
+            self.dtype = np.float128
         #
-        if nodes != None:
-            self.N = nodes
+        if type(myn) == 'str': # PATH TO FILE
+            self.lG,self.N,self.T = text_to_net(myn,**kwargs )
         #
-        if nodense: # if true prevents from computing dense matrices. useful for large networks
-            self.nodense = True
-            if priority == 'dense':
-                raise NetworkFormatError("Cannot set priority='dense' when nodense=True.")
+        #
         else:
-            self.nodense = False
-        #
-        self.dtype = dtype
-        #
-        if type(gimme) == str:
-            # it's a dir to a file
+            if not ( str( type(myn[0]) ) == "<class 'networkx.classes.graph.Graph'>" or str( type(myn[0]) ) == "<class 'networkx.classes.digraph.DiGraph'>" ): # networkx graph
+                raise NetworkFormatError('Unsupported format: could not find neither networkx Graph nor DiGraph objects.')
+            self.lG = myn
             #
-            # extension npy
-            if extension == 'npy': 
-                assert self.T != None, 'Format npy requires giving period length as period.'
-                if priority == 'dense':
-                    self.lA = []
-                    for t in range(self.T):
-                        self.lA.append( np.array( np.load( gimme+str(t)+'.'+extension ),dtype=self.dtype ) )
-                    if self.N == None:
-                        self.N = self.lA[0].shape[0]
-                else: #priority sparse
-                    self.lA_sparse = []
-                    for t in range(self.T):
-                        self.lA_sparse.append( csr_matrix( np.load( gimme+str(t)+'.'+extension ),dtype=self.dtype  ) )
-                    if self.N == None:
-                        self.N = self.lA_sparse[0].shape[0]
-                #
-            #
-            # extension npz
-            elif extension == 'npz':
-                with np.load( gimme+'.'+extension ) as archive:
-                    if self.T == None:
-                        self.T = len(archive.files)
-                    #
-                    if priority == 'dense':
-                        self.lA = []
-                        for t in range(self.T):
-                            self.lA.append( np.array( archive['arr_'+str(t)],dtype=self.dtype ) )
-                        if self.N == None:
-                            self.N = self.lA[0].shape[0]
-                    else: # priority sparse
-                        self.lA_sparse = []
-                        for t in range(self.T):
-                            self.lA_sparse.append( csr_matrix(archive['arr_'+str(t)],dtype=self.dtype) )
-                        if self.N == None:
-                            self.N = self.lA_sparse[0].shape[0]
-            #
-            # extension txt
-            elif extension == 'txt':
-                if self.T == None:
-                    raise NetworkFormatError('Format txt requires giving period length as period=')
-                if self.N == None:
-                    raise NetworkFormatError('Format txt requires giving number of nodes as nodes=')
-                #
-                if priority == 'dense':
-                    self.lA = []
-                    for t in range(self.T):
-                        self.lA.append( text_to_matrix_dense( gimme+str(t)+'.'+extension, self.N, self.dtype , weighted , directed ) )
-                    #if self.N == None:
-                    #   self.N = self.lA[0].shape[0]
-                else: # priority sparse
-                    self.lA_sparse = []
-                    for t in range(self.T):
-                        self.lA_sparse.append( csr_matrix( text_to_matrix_sparse( gimme+str(t)+'.'+extension, self.N, self.dtype , weighted , directed )  ) )
-                    #if self.N == None:
-                    #   self.N = self.lA_sparse[0].shape[0]
-        #
-        elif type(gimme) == list:
             if self.T == None:
-                self.T = len(gimme)
+                self.T = len(self.lG)
             #
-            # networkx graphs
-            if str( type(gimme[0]) ) == "<class 'networkx.classes.graph.Graph'>" or str( type(gimme[0]) ) == "<class 'networkx.classes.digraph.DiGraph'>":
-                if self.N == None:
-                    self.N = len( gimme[0].nodes() )
-                if priority == 'dense':
-                    self.lA = []
-                    for t in range(self.T):
-                        self.lA.append( np.array( nx.to_numpy_matrix(gimme[t],dtype=self.dtype) ) )
-                else: # priority sparse
-                    self.lA_sparse = []
-                    for t in range(self.T):
-                        self.lA_sparse.append( csr_matrix( nx.adjacency_matrix(gimme[t]),dtype=self.dtype ) )
-            #
-            # dense arrays
-            elif str( type(gimme[0]) ) == "<type 'numpy.ndarray'>":
-                print 'Setting nodense=False'
-                self.nodense = False
-                if type(gimme[0][0,0]) != dtype:
-                    raise NetworkFormatError('Input data type and the one of given arrays do not match.')
-                self.lA = list(gimme)
-                if self.N == None:
-                    self.N = gimme[0].shape[0]
-            #
-            # sparse arrays
-            elif str( type(gimme[0]) ) == "<class 'scipy.sparse.csr.csr_matrix'>":
-                if type(gimme[0][0,0]) != dtype:
-                    raise NetworkFormatError('Input data type and the one of given arrays do not match.')
-                self.lA_sparse = list(gimme)
-                if self.N == None:
-                    self.N = gimme[0].shape[0]
-            #
-        else:
-            raise NetworkFormatError('The format is not recognized')
-        #
-        #
+            # fill all graphs with all nodes
+            snodes = set()
+            if self.N == None:
+                self.N = len(snodes)
+            for G in self.lG:
+                snodes |= set( G.nodes() )
+            snodes = list(snodes)
+            for G in self.lG:
+                G.add_nodes_from( snodes )
+        #    
     #
     #
-    def setDense (self):
-        if self.nodense == True:
-            raise NetworkFormatError('Trying to produce dense matrices with todense=True.')
+    def getMatrices (self):
         if self.lA == None:
             self.lA = []
-            F = np.empty( shape=(self.N,self.N),dtype=self.dtype )
-            for A in self.lA_sparse:
-                A.todense(out=F)
-                self.lA.append( F.copy() )
-    #
-    #
-    def setSparse (self):
-        if self.lA_sparse == None:
-            self.lA_sparse = []
-            for A in self.lA:
-                self.lA_sparse.append( csr_matrix(A) )
-    #
-    #
-    def getDense (self):
-        if self.lA == None:
-            self.setDense()
+            for G in self.lG:
+                A = nx.adjacency_matrix(G)
+                self.lA.append( csr_matrix( A,dtype=self.dtype ))
         return self.lA
-    #
-    #
-    def getSparse (self):
-        if self.lA_sparse == None:
-            self.setSparse()
-        return self.lA_sparse
     #
     #
     def __str__ (self):
         spoutp = 'N = %d; T = %d\n' % (self.N,self.T)
-        spu = ['loaded','loaded']
-        if self.lA == None:
-            spu[0] = 'None'
-        if self.lA_sparse == None:
-            spu[1] = None
-        spoutp += 'lA : %s; lA_sparse : %s\n' % tuple(spu)
         spoutp += 'data type : %s\n' % str( self.dtype )
+        #
+        if str( type(self.lG[0]) ) == "<class 'networkx.classes.graph.Graph'>": # WEIGHTED
+            spu = 'False'
+        else:
+            spu = 'True'
         spoutp += 'weighted : ' + str(self.weight) + '\n'
+        #
+        t = 0
+        while len( self.lG[t].edges() ) == 0:
+            t += 1
+        if 'weight' in self.lG[t].edges(data=True)[0][2] : # DIRECTED
+            spu = 'True'
+        else:
+            spu = 'False'
+        spoutp += 'directed : ' + str(spu) + '\n'
+        #
+        if self.lA == None: # MATRICES LOADED
+            spu = 'not loaded'
+        else:
+            spu = 'loaded'
+        spoutp += 'adjacency matrices : ' + str(spu) + '\n'
         return spoutp
     #
     def __repr__ (self):
         return self.__str__()
 
+
 ############################
 ############################
 ############################
 ############################
-############################
-def direct_spectral_radius (ladda,mu,lA,N,T):
-    rootT=1.0/float(T)
-    identi = np.identity(N)
-    P = ladda*lA[0] + (1.-mu)*identi
-    for t in range(1,T):
-        P = np.dot(ladda*lA[t] + (1.-mu)*identi,P)
-    spec = np.abs( eigvals(P) )
-    radP = np.max(spec)
-    return radP**rootT - 1.
+########################################################
 ############################
 ############################
 ############################
-############################
-############################
-def direct_spectral_radius_weighted (ladda,mu,lA,N,T):
-    rootT=1.0/float(T)
-    identi = np.identity(N)
-    P = 1. - np.power(1.-ladda,lA[0]) + (1.-mu)*identi
-    for t in range(1,T):
-        P = np.dot( 1. - np.power(1.-ladda,lA[t]) + (1.-mu)*identi,P)
-    spec = np.abs( eigvals(P) )
-    radP = np.max(spec)
-    return radP**rootT - 1.
-############################
+########################################################
 ############################
 ############################
 ############################
@@ -369,7 +262,7 @@ def power_spectral_radius_weighted(ladda,mu,lA,N,T,valumax=1000,stabint=10,toler
 ############################
 ############################
 ############################
-def find_threshold (mu,R,method='power',weighted=False,findroot='brentq',vmin=0.001,vmax=0.999,maxiter=50,xtol=0.0001):
+def find_threshold (mu,R,vmin=0.001,vmax=0.999,weighted=False,findroot='brentq',maxiter=50,xtol=0.0001):
     #
     if findroot == 'brentq':
         rootFinder = brentq
@@ -378,41 +271,22 @@ def find_threshold (mu,R,method='power',weighted=False,findroot='brentq',vmin=0.
     else:
         raise ThresholdError,'method for root finding '+findroot+' is not supported.'
     #
-    if method=='direct':
-        try:
-            if weighted:
-                result,rr = rootFinder( direct_spectral_radius_weighted,vmin,vmax,args=(mu,R.getDense(),R.N,R.T),xtol=xtol,maxiter=maxiter,full_output=True,disp=False )
-            else:
-                result,rr = rootFinder( direct_spectral_radius,vmin,vmax,args=(mu,R.getDense(),R.N,R.T),xtol=xtol,maxiter=maxiter,full_output=True,disp=False )
-        except np.linalg.LinAlgError:
-            print 'Computation of spectral radius does not converge.'
-        except ValueError:
-            print  'ValueError: Interval may not contain zeros (or other ValueError).'
-            return np.nan
+    try:
+        if weighted:
+            result,rr = rootFinder( power_spectral_radius_weighted,vmin,vmax,args=(mu,R.getMatrices(),R.N,R.T),xtol=xtol,maxiter=maxiter,full_output=True,disp=False )
         else:
-            if not rr.converged:
-                print 'Optimization did not converge.'
-                return np.nan
-        return result
-    elif method=='power':
-        try:
-            if weighted:
-                result,rr = rootFinder( power_spectral_radius_weighted,vmin,vmax,args=(mu,R.getSparse(),R.N,R.T),xtol=xtol,maxiter=maxiter,full_output=True,disp=False )
-            else:
-                result,rr = rootFinder( power_spectral_radius,vmin,vmax,args=(mu,R.getSparse(),R.N,R.T),xtol=xtol,maxiter=maxiter,full_output=True,disp=False )
-        except ThresholdError,err_string:
-            print err_string
-            return np.nan
-        except ValueError:
-            print  'ValueError: Interval may not contain zeros (or other ValueError).',power_spectral_radius_weighted(vmax,mu,R.getSparse(),R.N,R.T)
-            return np.nan
-        else:
-            if not rr.converged:
-                print 'Optimization did not converge.'
-                return np.nan
-        return result
+            result,rr = rootFinder( power_spectral_radius,         vmin,vmax,args=(mu,R.getMatrices(),R.N,R.T),xtol=xtol,maxiter=maxiter,full_output=True,disp=False )
+    except ThresholdError,err_string:
+        print err_string
+        return np.nan
+    except ValueError:
+        print  'ValueError: Interval may not contain zeros (or other ValueError).',power_spectral_radius_weighted(vmax,mu,R.getSparse(),R.N,R.T)
+        return np.nan
     else:
-        raise ThresholdError,'method '+method+' is not supported.'
+        if not rr.converged:
+            print 'Optimization did not converge.'
+            return np.nan
+    return result
 ##############
 ##############
 ##############

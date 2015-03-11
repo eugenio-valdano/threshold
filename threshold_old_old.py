@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-#
-### written with
-### python 2.7.8
-### numpy 1.9.0
-### scipy 0.14.0
-### networkx 1.9.1
-#
+"""
+Created on Thu Dec  4 14:53:30 2014
+
+@author: eugenio
+"""
 import numpy as np
 from scipy.sparse import csr_matrix
 import networkx as nx
@@ -68,7 +66,11 @@ def text_to_matrix_dense (fname,N,dtype,weighted,directed): # transforms an edge
         return np.array( nx.to_numpy_matrix(G,weight=None,dtype=dtype) )
 
 
-
+### built for
+### python 2.7.8
+### numpy 1.9.0
+### scipy 0.14.0
+### networkx 1.9.1
 ###
 ### supported formats:
 ### '<dirtoname>/<name>_t_' and extension 'npy'
@@ -130,20 +132,20 @@ class tnet:
             #
             # extension npz
             elif extension == 'npz':
-                with np.load( gimme+'.'+extension ) as archive:
+                with np.load( gimme+'.'+extension ) as archivio:
                     if self.T == None:
-                        self.T = len(archive.files)
+                        self.T = len(archivio.files)
                     #
                     if priority == 'dense':
                         self.lA = []
                         for t in range(self.T):
-                            self.lA.append( np.array( archive['arr_'+str(t)],dtype=self.dtype ) )
+                            self.lA.append( np.array( archivio['arr_'+str(t)],dtype=self.dtype ) )
                         if self.N == None:
                             self.N = self.lA[0].shape[0]
                     else: # priority sparse
                         self.lA_sparse = []
                         for t in range(self.T):
-                            self.lA_sparse.append( csr_matrix(archive['arr_'+str(t)],dtype=self.dtype) )
+                            self.lA_sparse.append( csr_matrix(archivio['arr_'+str(t)],dtype=self.dtype) )
                         if self.N == None:
                             self.N = self.lA_sparse[0].shape[0]
             #
@@ -239,16 +241,16 @@ class tnet:
     #
     #
     def __str__ (self):
-        spoutp = 'N = %d; T = %d\n' % (self.N,self.T)
+        sputo = 'N = %d; T = %d\n' % (self.N,self.T)
         spu = ['loaded','loaded']
         if self.lA == None:
             spu[0] = 'None'
         if self.lA_sparse == None:
             spu[1] = None
-        spoutp += 'lA : %s; lA_sparse : %s\n' % tuple(spu)
-        spoutp += 'data type : %s\n' % str( self.dtype )
-        spoutp += 'weighted : ' + str(self.weight) + '\n'
-        return spoutp
+        sputo += 'lA : %s; lA_sparse : %s\n' % tuple(spu)
+        sputo += 'data type : %s\n' % str( self.dtype )
+        sputo += 'weighted : ' + str(self.weight) + '\n'
+        return sputo
     #
     def __repr__ (self):
         return self.__str__()
@@ -287,37 +289,37 @@ def direct_spectral_radius_weighted (ladda,mu,lA,N,T):
 ############################
 ############################
 
-def power_spectral_radius(ladda,mu,lA,N,T,valumax=1000,stabint=10,tolerance=0.0001): #lA = sparse csr matrices 
+def power_spectral_radius(ladda,mu,lA,N,T,valumax=1000,stabint=10,tolerance=0.0001): #lA = MATRICI SPARSE CSR
     """
-    NOTE: matrices in lA must be objects \'scipy.sparse.csr.csr_matrix\'
+    NOTA: le matrici di lA devono essere oggetti \'scipy.sparse.csr.csr_matrix\' ( creali con la funzione scipy.sparse.csr_matrix)
     """
     rootT=1.0/float(T)
-    # initialize
+    # inizializzo le cose iniziali
     leval = []
     v0 = 0.9*np.random.random(N)+0.1
     v = v0.copy()
     vold = v.copy()
-    interrupt = False # when there is convergence, becomes True
+    interrotto = False # se viene interrotto per convergenza, diventa vero
     #
     itmax = T*valumax
     for k in range(itmax):
-        v = ladda*lA[k%T].dot(v) + (1.-mu)*v # iteration
-        if k%T == T-1: # period completed
+        v = ladda*lA[k%T].dot(v) + (1.-mu)*v # iterazione
+        if k%T == T-1: # completato il periodo
             autoval = np.dot(vold,v)
             leval.append( autoval**rootT )
             #
-            if len(leval)>=stabint: # check convergence
+            if len(leval)>=stabint: # check della convergenza
                 fluct = ( max( leval[-stabint:] ) - min( leval[-stabint:] ) ) / np.mean( leval[-stabint:] )
             else:
                 fluct = 1.+tolerance
             if fluct < tolerance:
-                interrupt = True
+                interrotto = True
                 break
-            mnorm = np.linalg.norm(v)
-            v = v/mnorm
+            norma = np.linalg.norm(v)
+            v = v/norma
             vold = v.copy()
     #
-    if not interrupt: # if never interrupted, check now convergence
+    if not interrotto: # se non e' stato mai interrotto, controllo la convergenza
         fluct = ( max( leval[-stabint:] ) - min( leval[-stabint:] ) ) / np.mean( leval[-stabint:] )
         if fluct >= tolerance:
             raise ThresholdError,'Power method did not converge.'
@@ -327,39 +329,39 @@ def power_spectral_radius(ladda,mu,lA,N,T,valumax=1000,stabint=10,tolerance=0.00
 ############################
 ############################
 ############################
-def power_spectral_radius_weighted(ladda,mu,lA,N,T,valumax=1000,stabint=10,tolerance=0.0001):
+def power_spectral_radius_weighted(ladda,mu,lA,N,T,valumax=1000,stabint=10,tolerance=0.0001): #lA = MATRICI SPARSE CSR
     """
-    NOTE: matrices in lA must be objects \'scipy.sparse.csr.csr_matrix\'
+    NOTA: le matrici di lA devono essere oggetti \'scipy.sparse.csr.csr_matrix\' ( creali con la funzione scipy.sparse.csr_matrix)
     """
     loglad = np.log(1.-ladda)
     rootT=1.0/float(T)
-    # initialize
+    # inizializzo le cose iniziali
     leval = []
     v0 = 0.9*np.random.random(N)+0.1
     v = v0.copy()
     vold = v.copy()
-    interrupt = False # when there is convergence, becomes True
+    interrotto = False # se viene interrotto per convergenza, diventa vero
     #
     itmax = T*valumax
     for k in range(itmax):
-        # use of function expm1: -(loglad*lA[k%T]).expm1() = 1-(1-ladda)^Aij
-        v = -(loglad*lA[k%T]).expm1().dot(v) + (1.-mu)*v # iteration
-        if k%T == T-1: # period completed
+        # -(loglad*lA[k%T]).expm1() = 1-(1-ladda)**Aij
+        v = -(loglad*lA[k%T]).expm1().dot(v) + (1.-mu)*v # iterazione     #### CAMBIARE!
+        if k%T == T-1: # completato il periodo
             autoval = np.dot(vold,v)
             leval.append( autoval**rootT )
             #
-            if len(leval)>=stabint: # check convergence
+            if len(leval)>=stabint: # check della convergenza
                 fluct = ( max( leval[-stabint:] ) - min( leval[-stabint:] ) ) / np.mean( leval[-stabint:] )
             else:
                 fluct = 1.+tolerance
             if fluct < tolerance:
-                interrupt = True
+                interrotto = True
                 break
-            mnorm = np.linalg.norm(v)
-            v = v/mnorm
+            norma = np.linalg.norm(v)
+            v = v/norma
             vold = v.copy()
     #
-    if not interrupt: # if never interrupted, check now convergence
+    if not interrotto: # se non e' stato mai interrotto, controllo la convergenza
         fluct = ( max( leval[-stabint:] ) - min( leval[-stabint:] ) ) / np.mean( leval[-stabint:] )
         if fluct >= tolerance:
             raise ThresholdError,'Power method did not converge.'
@@ -369,7 +371,7 @@ def power_spectral_radius_weighted(ladda,mu,lA,N,T,valumax=1000,stabint=10,toler
 ############################
 ############################
 ############################
-def find_threshold (mu,R,method='power',weighted=False,findroot='brentq',vmin=0.001,vmax=0.999,maxiter=50,xtol=0.0001):
+def find_threshold (mu,R,method='power',weighted=False,findroot='brentq',vmin=0.001,vmax=0.999,maxiter=50,xtol=0.0001): # f=funzione che usa per calcolare auto
     #
     if findroot == 'brentq':
         rootFinder = brentq
@@ -404,7 +406,7 @@ def find_threshold (mu,R,method='power',weighted=False,findroot='brentq',vmin=0.
             print err_string
             return np.nan
         except ValueError:
-            print  'ValueError: Interval may not contain zeros (or other ValueError).',power_spectral_radius_weighted(vmax,mu,R.getSparse(),R.N,R.T)
+            print  'ValueError: Interval may not contain zeros (or other ValueError).'
             return np.nan
         else:
             if not rr.converged:
