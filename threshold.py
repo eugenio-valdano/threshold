@@ -135,10 +135,10 @@ class tnet:
             
             # Fill all graphs with all nodes
             snodes = set()
-            if self.N == None:
-                self.N = len(snodes)
             for G in self.lG:
                 snodes |= set(G.nodes())
+            if self.N == None:
+                self.N = len(snodes)
             snodes = list(snodes)
             for G in self.lG:
                 G.add_nodes_from(snodes)
@@ -294,8 +294,8 @@ def power_spectral_radius_weighted(ladda, mu, lA, N, T, valumax=1000, stabint=10
 
 
 
-# Function for computing the threshold. Additional optional keywords: weighted (bool), findroot (='brentq' or ='bisect').
-def find_threshold (mu, R, vmin=0.001, vmax=0.999, maxiter=50, xtol=0.0001, **kwargs):
+# Function for computing the threshold. Additional optional keywords: weighted (bool), findroot (='brentq' or ='bisect'), xtol, rtol (for the last two, see scipy brentq, bisect documentation)
+def find_threshold (mu, R, vmin=0.001, vmax=0.999, maxiter=50, **kwargs):
     
     if 'weighted' in kwargs:
         weighted = kwargs['weighted']
@@ -315,12 +315,17 @@ def find_threshold (mu, R, vmin=0.001, vmax=0.999, maxiter=50, xtol=0.0001, **kw
     else:
         raise ThresholdError,'method for root finding '+findroot+' is not supported.'
     
+    kwargs2 = {}
+    if 'xtol' in kwargs:
+        kwargs2['xtol'] = kwargs['xtol']
+    if 'rtol' in kwargs:
+        kwargs2['rtol'] = kwargs['rtol']
     
     try:
         if weighted:
-            result, rr = rootFinder(power_spectral_radius_weighted, vmin, vmax, args=(mu, R.getMatrices(), R.N, R.T), xtol=xtol, maxiter=maxiter, full_output=True, disp=False)
+            result, rr = rootFinder(power_spectral_radius_weighted, vmin, vmax, args=(mu, R.getMatrices(), R.N, R.T), maxiter=maxiter, full_output=True, disp=False, **kwargs2)
         else:
-            result, rr = rootFinder(power_spectral_radius, vmin, vmax, args=(mu, R.getMatrices(), R.N, R.T), xtol=xtol, maxiter=maxiter, full_output=True, disp=False )
+            result, rr = rootFinder(power_spectral_radius, vmin, vmax, args=(mu, R.getMatrices(), R.N, R.T), maxiter=maxiter, full_output=True, disp=False, **kwargs2)
     except ThresholdError, err_string:
         print err_string
         return np.nan

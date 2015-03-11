@@ -1,10 +1,9 @@
 # Computing the Epidemic Threshold on Temporal Networks
 Provides tools for computing the epidemic threshold on temporal network, as explained in paper
 
-**(2015) Analytical Computation of The Epidemic Threshold on Temporal Networks**
+[**Analytical Computation of The Epidemic Threshold on Temporal Networks**](https://journals.aps.org/prx/)
 
 Valdano E, Ferreri L, Poletto C, Colizza V, *Phys Rev X*, 2015.
-
 ## Required software
 - Python 2.7.9
 - numpy 1.9.2
@@ -62,8 +61,8 @@ compute the threshold for network R (stored as tnet object) and recovery probabi
 
 - `vmin=0.001`, `vmax=0.999`: range for the threshold;
 - `maxiter=50`: maximum number of iterations of the modified power method algorithm;
-- `xtol=0.0001`: absolute tolerance of the result;
 
 ##### other optional keywords
 - `weighted`: whether to treat the network as weighted ( to know how weights are treated, see Supporting Information of ref Valdano et al). If not present, treat as weighted when the network is weighted, and unweighted when the network is unweighted.
 - `findroot`: can be `'bisect'` or `'brentq'`, referring to respective functions in `scipy.optimize`. If not specified, treated as `findroot='brentq'`
+- `xtol` and `rtol`: allow to set the absolute and relative precision of the root finding algorithm. For further details see, for instance, `scipy.optimize.brentq` [documentation]( http://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html#scipy.optimize.brentq ).
