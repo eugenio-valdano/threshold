@@ -91,8 +91,10 @@ def text_to_net (fname, **kwargs):
 # From networx Graph, create adjacency matrices as sparse CSR objects.
 def graph_to_csr (lG,dtype):
     lAs = []
+    # Get nodelist from first graph, since they all contain all nodes.
+    lnodes = set(lG[0].nodes())
     for G in lG:
-        A = nx.adjacency_matrix(G)
+        A = nx.adjacency_matrix(G, nodelist=lnodes)
         lAs.append(csr_matrix(A, dtype=dtype))
     return lAs
     
@@ -156,10 +158,7 @@ class tnet:
     
     def getMatrices (self):
         if self.lA == None:
-            self.lA = []
-            for G in self.lG:
-                A = nx.adjacency_matrix(G)
-                self.lA.append(csr_matrix( A,dtype=self.dtype ))
+            self.lA = graph_to_csr(self.lG, self.dtype)
         return self.lA
     
     
