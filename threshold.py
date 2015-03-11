@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
 #
-### written with
-### python 2.7.8
-### numpy 1.9.0
-### scipy 0.14.0
-### networkx 1.9.1
 #
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -77,7 +72,7 @@ def text_to_net (fname,**kwargs):
     # fill with all nodes
     snodes = list(snodes)
     for G in lG:
-        lG.add_nodes_from( snodes )
+        G.add_nodes_from( snodes )
     #
     return lG,N,T # returns list of graphs and number of nodes
     
@@ -97,14 +92,19 @@ class tnet:
     N = None
     lA = None
     dtype = np.float64
+    weighted = None
     #
     def __init__ (self, myn, period=None, dtype='float64', **kwargs ): # directed=False, separator='\t'
         #
         if dtype != 'float64': # if different from this, set longer float
             self.dtype = np.float128
         #
-        if type(myn) == 'str': # PATH TO FILE
-            self.lG,self.N,self.T = text_to_net(myn,**kwargs )
+        if type(myn) == str: # PATH TO FILE
+            self.lG,self.N,buT = text_to_net(myn,**kwargs )
+            if self.T == None:
+                self.T = buT
+            else:
+                assert self.T <= buT, 'Specified period is longer than dataset.'
         #
         #
         else:
@@ -114,6 +114,8 @@ class tnet:
             #
             if self.T == None:
                 self.T = len(self.lG)
+            else:
+                assert self.T <= len(self.lG), 'Specified period is longer than dataset.'
             #
             # fill all graphs with all nodes
             snodes = set()
@@ -124,7 +126,16 @@ class tnet:
             snodes = list(snodes)
             for G in self.lG:
                 G.add_nodes_from( snodes )
-        #    
+        #
+        #
+        # check if weighted
+        ct = 0
+        while len( self.lG[ct].edges() ) == 0:
+            ct += 1
+        if 'weight' in self.lG[ct].edges(data=True)[0][2] : 
+            self.weighted = True
+        else:
+            self.weighted = False
     #
     #
     def getMatrices (self):
@@ -140,26 +151,26 @@ class tnet:
         spoutp = 'N = %d; T = %d\n' % (self.N,self.T)
         spoutp += 'data type : %s\n' % str( self.dtype )
         #
-        if str( type(self.lG[0]) ) == "<class 'networkx.classes.graph.Graph'>": # WEIGHTED
+        if str( type(self.lG[0]) ) == "<class 'networkx.classes.graph.Graph'>": # DIRECTED
             spu = 'False'
         else:
             spu = 'True'
-        spoutp += 'weighted : ' + str(self.weight) + '\n'
+        spoutp += 'directed : ' + spu + '\n'
         #
         t = 0
         while len( self.lG[t].edges() ) == 0:
             t += 1
-        if 'weight' in self.lG[t].edges(data=True)[0][2] : # DIRECTED
+        if self.weighted: # WEIGHTED
             spu = 'True'
         else:
             spu = 'False'
-        spoutp += 'directed : ' + str(spu) + '\n'
+        spoutp += 'weighted : ' + spu + '\n'
         #
         if self.lA == None: # MATRICES LOADED
             spu = 'not loaded'
         else:
             spu = 'loaded'
-        spoutp += 'adjacency matrices : ' + str(spu) + '\n'
+        spoutp += 'adjacency matrices : ' + spu + '\n'
         return spoutp
     #
     def __repr__ (self):
@@ -262,7 +273,18 @@ def power_spectral_radius_weighted(ladda,mu,lA,N,T,valumax=1000,stabint=10,toler
 ############################
 ############################
 ############################
-def find_threshold (mu,R,vmin=0.001,vmax=0.999,weighted=False,findroot='brentq',maxiter=50,xtol=0.0001):
+def find_threshold (mu,R,vmin=0.001,vmax=0.999,maxiter=50,xtol=0.0001,**kwargs): # weighted, findroot=('brentq','bisect')
+    #
+    if 'weighted' in kwargs:
+        weighted = kwargs['weighted']
+    else:
+        weighted = R.weighted
+    #
+    #
+    if 'rootFinder' in kwargs:
+        findroot = kwargs['rootFinder']
+    else:
+        findroot = 'brentq'
     #
     if findroot == 'brentq':
         rootFinder = brentq
@@ -270,6 +292,7 @@ def find_threshold (mu,R,vmin=0.001,vmax=0.999,weighted=False,findroot='brentq',
         rootFinder = bisect
     else:
         raise ThresholdError,'method for root finding '+findroot+' is not supported.'
+    #
     #
     try:
         if weighted:
@@ -280,7 +303,7 @@ def find_threshold (mu,R,vmin=0.001,vmax=0.999,weighted=False,findroot='brentq',
         print err_string
         return np.nan
     except ValueError:
-        print  'ValueError: Interval may not contain zeros (or other ValueError).',power_spectral_radius_weighted(vmax,mu,R.getSparse(),R.N,R.T)
+        print  'ValueError: Interval may not contain zeros (or other ValueError). Value of spectral radius in vmax=',power_spectral_radius_weighted(vmax,mu,R.getMatrices(),R.N,R.T)
         return np.nan
     else:
         if not rr.converged:
@@ -289,4 +312,56 @@ def find_threshold (mu,R,vmin=0.001,vmax=0.999,weighted=False,findroot='brentq',
     return result
 ##############
 ##############
-##############
+#############
+    
+####
+#### CHECK VERSIONS
+    
+vers_python0 = '2.7.9'
+vers_numpy0  = '1.9.2'
+vers_scipy0  = '0.15.1'
+vers_netx0   = '1.9.1'
+ 
+from sys import version_info
+from scipy import __version__ as vers_scipy
+vers_python = '%s.%s.%s' % version_info[:3]
+vers_numpy  = np.__version__
+vers_netx   = nx.__version__    
+
+from warnings import warn
+if vers_python != vers_python0:
+    sp = 'This program has been tested for Python %s. Yours is version %s.' % (vers_python0,vers_python)
+    warn(sp)
+if vers_numpy != vers_numpy0:
+    sp = 'This program has been tested for numpy %s. Yours is version %s. It is likely to work anyway.' % (vers_numpy0,vers_numpy)
+    warn(sp)
+if vers_scipy != vers_scipy0:
+    sp = 'This program has been tested for scipy %s. Yours is version %s. It is likely to work anyway.' % (vers_scipy0,vers_scipy)
+    warn(sp) 
+if vers_netx != vers_netx0:
+    sp = 'This program has been tested for scipy %s. Yours is version %s. It may not work if your networkx is version 1.7 or older.' % (vers_netx0,vers_netx)
+    warn(sp)
+    
+    
+    
+if __name__ == '__main__':
+    print '---------'
+    print '---------'
+    print '---------'
+    print '---------'
+    print 'MODULE FOR COMPUTING THE EPIDEMIC THRESHOLD ON TEMPORAL NETWORKS.'
+    print 'Based on Valdano E et al (2015) Phys Rev X.'
+    print '---------'
+    print 'import in your program like this: "from threshold import tnet,find threshold". For help read README.md'
+    print '---------'
+    print 'Required modules:'
+    print 'Python:   tested for: %s.  Yours: %s'   % (vers_python0,vers_python)
+    print 'numpy:    tested for: %s.  Yours: %s'    % (vers_numpy0,vers_numpy)
+    print 'scipy:    tested for: %s. Yours: %s'    % (vers_scipy0,vers_scipy)
+    print 'networkx: tested for: %s.  Yours: %s' % (vers_netx0,vers_netx)
+    print '--------'
+    print 'It may however work with different versions. It will not probably work with networkx 1.7 or older.'
+    print '--------'
+    print '--------'
+    print '--------'
+    print '--------'
