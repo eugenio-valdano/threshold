@@ -4,6 +4,10 @@ Provides tools for computing the epidemic threshold on temporal network, as expl
 [**Analytical Computation of The Epidemic Threshold on Temporal Networks**](https://journals.aps.org/prx/)
 
 Valdano E, Ferreri L, Poletto C, Colizza V, *Phys Rev X*, 2015.
+
+**When you use this code, please cite the above reference.**
+
+
 ## Required software
 - Python 2.7.9
 - numpy 1.9.2
