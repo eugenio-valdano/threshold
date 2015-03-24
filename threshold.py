@@ -102,15 +102,16 @@ def graph_to_csr (lG,dtype):
 
 # class for handling the temporal network        
 class tnet:
-    lG = None
-    T = None
-    N = None
-    lA = None
-    dtype = np.float64
-    weighted = None
     
     # Class constructor. Additional optional keywords: directed (bool), separator (str).
     def __init__ (self, myn, period=None, dtype='float64', **kwargs ):
+        
+        self.lG = None
+        self.T = None
+        self.N = None
+        self.lA = None
+        self.dtype = np.float64
+        self.weighted = None
         
         # If dtype is different from 'float64', then np.float128 is set
         if dtype != 'float64': 
@@ -204,7 +205,7 @@ class tnet:
 
 
 # Compute the spectral radius using the modified power method.
-def power_spectral_radius(ladda, mu, lA, N, T, valumax=1000, stabint=10, tolerance=0.0001):
+def power_spectral_radius(ladda, mu, lA, N, T, valumax=1000, stabint=10, tolerance=0.00001):
     
     rootT = 1.0 / float(T)
     
