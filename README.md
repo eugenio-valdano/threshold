@@ -44,8 +44,7 @@ The network can then be loaded in class `tnet` as follows:
 
 ### Arguments for `tnet`, with their default values
 
-- `my_network`: where to look for the network, according to supported formats (see above).
-- `extension = 'npy'`: must be specified when using directory to files as input (see below);
+- `my_network`: where to look for the network, according to supported formats (see above);
 - `period = None`: set period like this, if only a part of the network is to be used, up to period `T` (less than the one inferred from time stamps);
 - `dtype = 'float64'`: the bit length of the used float. In order to avoid underflow, sometimes `float128` is needed. Every string that is not `'float64'` is interpreted as `'float128'`.
 
