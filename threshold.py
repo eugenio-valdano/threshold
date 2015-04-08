@@ -330,7 +330,12 @@ def find_threshold (mu, R, vmin=0.001, vmax=0.999, maxiter=50, **kwargs):
         print err_string
         return np.nan
     except ValueError:
-        print  'ValueError: Interval may not contain zeros (or other ValueError). Value of spectral radius in vmax=', power_spectral_radius_weighted(vmax, mu, R.getMatrices(), R.N, R.T)
+        if weighted:
+            srerr = power_spectral_radius_weighted(vmax, mu, R.getMatrices(), R.N, R.T)
+        else:
+            srerr = power_spectral_radius(vmax, mu, R.getMatrices(), R.N, R.T)
+        spuz = 'ValueError: Interval may not contain zeros (or other ValueError). vmax = %.5f, spectral radius in vmax = %.5f' % (vmax, srerr)
+        print spuz 
         return np.nan
     else:
         if not rr.converged:
