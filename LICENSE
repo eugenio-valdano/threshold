@@ -1,4 +1,8 @@
 Copyright (c) 2015, Eugenio Valdano
+
+related scientific article:
+Valdano E, Ferreri L, Poletto C and Colizza V (2015) Analytical computation of the epidemic threshold on temporal networks. Physical Review X 5, 021005.
+
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -11,6 +15,7 @@ modification, are permitted provided that the following conditions are met:
 3. Neither the name of the threshold package developer nor the
    names of its contributors may be used to endorse or promote products
    derived from this software without specific prior written permission.
+4. The above mentioned article is cited.
 
 THIS SOFTWARE IS PROVIDED BY EUGENIO VALDANO ''AS IS'' AND ANY
 EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -23,4 +28,3 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Users of this code should cite the following article: Valdano E, Ferreri L, Poletto C and Colizza V (2015) Analytical computation of the epidemic threshold on temporal networks. Physical Review X 5, 021005.

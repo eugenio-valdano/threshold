@@ -7,6 +7,8 @@ Valdano E, Ferreri L, Poletto C, Colizza V, *Phys Rev X* 5, 021005 2015.
 
 **When you use this code, please cite the above reference.**
 
+Further details on terms of use: see LICENSE
+
 
 ## Required software
 - Python 2.7.9
