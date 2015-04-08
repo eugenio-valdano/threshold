@@ -1,9 +1,9 @@
 # Computing the Epidemic Threshold on Temporal Networks
 Provides tools for computing the epidemic threshold on temporal network, as explained in paper
 
-[**Analytical Computation of The Epidemic Threshold on Temporal Networks**](https://journals.aps.org/prx/)
+[**Analytical Computation of The Epidemic Threshold on Temporal Networks**](http://journals.aps.org/prx/abstract/10.1103/PhysRevX.5.021005)
 
-Valdano E, Ferreri L, Poletto C, Colizza V, *Phys Rev X*, 2015.
+Valdano E, Ferreri L, Poletto C, Colizza V, *Phys Rev X* 5, 021005 2015.
 
 **When you use this code, please cite the above reference.**
 
