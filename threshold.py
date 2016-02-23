@@ -210,7 +210,8 @@ def power_spectral_radius(ladda, mu, lA, N, T, valumax=1000, stabint=10, toleran
     rootT = 1.0 / float(T)
     
     # Initialize
-    leval = []
+    leval = np.empty(shape=(stabint,), dtype=np.float)
+    ceval = 0
     v0 = 0.9*np.random.random(N) + 0.1
     v = v0.copy()
     vold = v.copy()
@@ -223,12 +224,14 @@ def power_spectral_radius(ladda, mu, lA, N, T, valumax=1000, stabint=10, toleran
         
         # Whether period is completed:
         if k%T == T-1:
-            autoval = np.dot(vold,v)
-            leval.append(autoval**rootT)
+            #autoval = np.dot(vold,v)
+            leval[ceval%stabint] = np.dot(vold,v)**rootT
+            ceval += 1
+            #leval.append(autoval**rootT)
             
             # Check convergence
-            if len(leval) >= stabint:
-                fluct = ( max(leval[-stabint:]) - min(leval[-stabint:]) ) / np.mean(leval[-stabint:])
+            if ceval >= stabint:
+                fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
             else:
                 fluct = 1. + tolerance
             if fluct < tolerance:
@@ -240,7 +243,7 @@ def power_spectral_radius(ladda, mu, lA, N, T, valumax=1000, stabint=10, toleran
     
     # If never interrupted, check now convergence.
     if not interrupt: 
-        fluct = ( max(leval[-stabint:]) - min(leval[-stabint:]) ) / np.mean(leval[-stabint:])
+        fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
         if fluct >= tolerance:
             raise ThresholdError, 'Power method did not converge.'
             
@@ -256,7 +259,8 @@ def power_spectral_radius_weighted(ladda, mu, lA, N, T, valumax=1000, stabint=10
     rootT = 1.0 / float(T)
     
     # Initialize
-    leval = []
+    leval = np.empty(shape=(stabint,), dtype=np.float)
+    ceval = 0
     v0 = 0.9*np.random.random(N) + 0.1
     v = v0.copy()
     vold = v.copy()
@@ -270,12 +274,12 @@ def power_spectral_radius_weighted(ladda, mu, lA, N, T, valumax=1000, stabint=10
         
         # Whether period is completed
         if k%T == T-1: 
-            autoval = np.dot(vold,v)
-            leval.append( autoval**rootT )
+            leval[ceval%stabint] = np.dot(vold,v)**rootT
+            ceval += 1
             
             # Check convergence
-            if len(leval)>=stabint: 
-                fluct = (max( leval[-stabint:]) - min(leval[-stabint:]) ) / np.mean(leval[-stabint:])
+            if ceval >= stabint:
+                fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
             else:
                 fluct = 1. + tolerance
             if fluct < tolerance:
@@ -287,7 +291,7 @@ def power_spectral_radius_weighted(ladda, mu, lA, N, T, valumax=1000, stabint=10
     
     # If never interrupted, check now convergence.
     if not interrupt: 
-        fluct = ( max(leval[-stabint:]) - min(leval[-stabint:]) ) / np.mean(leval[-stabint:])
+        fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
         if fluct >= tolerance:
             raise ThresholdError,'Power method did not converge.'
     return leval[-1] - 1.
