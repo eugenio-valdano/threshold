@@ -101,74 +101,153 @@ def graph_to_csr (lG,dtype):
 
 
 # class for handling the temporal network        
-class tnet:
+class tnet(object):
     
     # Class constructor. Additional optional keywords: directed (bool), separator (str).
-    def __init__ (self, myn, period=None, dtype='float64', **kwargs ):
+    def __init__ (self, myn, period=None, dtype='float128', **kwargs ):
         
-        self.lG = None
-        self.T = None
-        self.N = None
-        self.lA = None
-        self.dtype = np.float64
-        self.weighted = None
+        #self.lG = None
+        #self.T = None
+        #self.N = None
+        #self.lA = None
+        self._dtype = np.float64
+        #self.weighted = None
         
         # If dtype is different from 'float64', then np.float128 is set
         if dtype != 'float64': 
-            self.dtype = np.float128
+            self._dtype = np.float128
         
         # if: Path to file.
         if type(myn) == str: 
-            self.lG, self.N, buT = text_to_net(myn, **kwargs )
-            if self.T == None:
-                self.T = buT
+            self._lG, self._N, buT = text_to_net(myn, **kwargs )
+            if not hasattr(self,'_T'):#:self.T == None:
+                self._T = buT
             else:
-                assert self.T <= buT, 'Specified period is longer than dataset.'
+                assert self._T <= buT, 'Specified period is longer than dataset.'
         
         # else: list of graphs
         else:
             if not ( str(type(myn[0])) == "<class 'networkx.classes.graph.Graph'>" or str(type(myn[0])) == "<class 'networkx.classes.digraph.DiGraph'>" ): # networkx graph
                 raise NetworkFormatError('Unsupported format: could not find neither networkx Graph nor DiGraph objects.')
-            self.lG = myn
+            self._lG = myn
             
-            if self.T == None:
-                self.T = len(self.lG)
+            if not hasattr(self,'_T'):#self.T == None:
+                self._T = len(self._lG)
             else:
-                assert self.T <= len(self.lG), 'Specified period is longer than dataset.'
+                assert self._T <= len(self._lG), 'Specified period is longer than dataset.'
             
             # Fill all graphs with all nodes
             snodes = set()
-            for G in self.lG:
+            for G in self._lG:
                 snodes |= set(G.nodes())
-            if self.N == None:
-                self.N = len(snodes)
+            if not hasattr(self,'_N'):#self.N == None:
+                self._N = len(snodes)
             snodes = list(snodes)
-            for G in self.lG:
+            for G in self._lG:
                 G.add_nodes_from(snodes)
         
         
         # Check if weighted.
         ct = 0
-        while len(self.lG[ct].edges()) == 0:
+        while len(self._lG[ct].edges()) == 0:
             ct += 1
-        if 'weight' in self.lG[ct].edges(data=True)[0][2] : 
-            self.weighted = True
+        if 'weight' in self._lG[ct].edges(data=True)[0][2] : 
+            self._weighted = True
         else:
-            self.weighted = False
+            self._weighted = False
+            
+            
+    ##
+    ## PROPERTY lA
+    ##
+    @property
+    def lA(self):
+        if not hasattr(self,'_lA'):
+            self._lA = graph_to_csr(self._lG, self._dtype)
+        return self._lA
+        
+    @lA.setter
+    def lA(self,value):
+        raise NotImplementedError, 'You cannot set adjacency matrices directly.'
+        
+    ##
+    ## PROPERTY lG
+    ##
+    @property
+    def lG(self):
+        return [ G.copy() for G in self._lG ]
     
+    @lG.setter
+    def lG(self,value):
+        raise NotImplementedError, 'You cannot set graphs directly.'
+        
+        
+    ##
+    ## PROPERTY weighted
+    ##
+    @property
+    def weighted(self):
+        return self._weighted
     
-    def getMatrices (self):
-        if self.lA == None:
-            self.lA = graph_to_csr(self.lG, self.dtype)
-        return self.lA
+    @weighted.setter
+    def weighted(self,value):
+        raise NotImplementedError, 'You cannot change weighted status directly.'        
+        
+    ##
+    ## PROPERTY N
+    ##
+    @property
+    def N(self):
+        return self._N
+    
+    @N.setter
+    def N(self,value):
+        assert False, 'You cannot manually edit the number of nodes.'
+        
+    ##
+    ## PROPERTY T
+    ##
+    @property
+    def T(self):
+        return self._T
+    
+    @T.setter
+    def T(self,value):
+        
+        assert value<=self._T, 'You can at most reduce period, not increase it.'
+        
+        # check that you are actually reducing the period, and not giving the same value
+        if value < self._T:      
+        
+            self._T = value
+            
+            # reduce the number of time steps, and checks if it can throw away some nodes that now never activate
+            self._lG = self._lG[:self._T]
+            snodes = set([ x for G in self._lG for e in G.edges() for x in e ])            
+            if len(snodes) < self._N:
+                warn('Decreasing the period has resulted in decreasing the number of nodes in the network.')
+                self._N = len(snodes)
+                snodes = list(snodes)
+                self._lG = [ nx.subgraph(G,snodes) for G in self._lG]
+                # reset lA
+                if hasattr(self,'_lA'):
+                    del self._lA
+            else:
+                # clip lA
+                if hasattr(self,'_lA'):
+                    self._lA = self._lA[:self._T]
+                
+        
+        
+
     
     
     def __str__ (self):
-        spoutp = 'N = %d; T = %d\n' % (self.N,self.T)
-        spoutp += 'data type : %s\n' % str(self.dtype)
+        spoutp = 'N = %d; T = %d\n' % (self._N,self._T)
+        spoutp += 'data type : %s\n' % str(self._dtype)
         
         # Directed.
-        if str(type(self.lG[0])) == "<class 'networkx.classes.graph.Graph'>":
+        if str(type(self._lG[0])) == "<class 'networkx.classes.graph.Graph'>":
             spu = 'False'
         else:
             spu = 'True'
@@ -176,16 +255,16 @@ class tnet:
         
         # Weighted.
         t = 0
-        while len(self.lG[t].edges()) == 0:
+        while len(self._lG[t].edges()) == 0:
             t += 1
-        if self.weighted:
+        if self._weighted:
             spu = 'True'
         else:
             spu = 'False'
         spoutp += 'weighted : ' + spu + '\n'
         #
         # Whether matrices are loaded.
-        if self.lA == None: 
+        if not hasattr(self,'_lA'):#self._lA == None: 
             spu = 'not loaded'
         else:
             spu = 'loaded'
