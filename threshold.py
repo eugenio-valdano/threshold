@@ -532,7 +532,7 @@ def psr2w(ladda, mu, lA, N, T, valumax, tolerance, store):
     
     
     
-class find_threshold(object):
+class threshold(object):
     """
     Class for computing the epidemic threshold on a temporal network.
     """
