@@ -71,7 +71,7 @@ def text_to_net (fname, **kwargs):
         for line in raw:
             azz = line.strip().split(separator)
             x, y, t = azz[0], azz[1], int(azz[-1])
-            lG[t].add_edge(x, y, weight = int(azz[2]))
+            lG[t].add_edge(x, y, weight = float(azz[2]))
     else:
         for line in raw:
             azz = line.strip().split(separator)
@@ -124,6 +124,20 @@ class tnet(object):
                 assert self._T <= buT, 'Specified period is longer than dataset.'
             # set list of nodes
             self._nodelist = list(self._lG[0].nodes())
+            
+            # check if you specify manually a different period            
+            if period is None:
+                self._T = buT
+            else:
+                self._T = period
+                # if shorter, cut last time steps
+                if self._T < buT:
+                    self._lG = self._lG[:self._T]
+                # if longer, add empty time steps
+                elif self._T > buT:
+                    H = self._lG[0].copy()
+                    H.remove_edges_from(H.edges())
+                    self._lG = self._lG+[H.copy() for i in range(self._T-buT)]
         
         # else: list of graphs
         else:
@@ -131,10 +145,11 @@ class tnet(object):
                 raise NetworkFormatError('Unsupported format: could not find neither networkx Graph nor DiGraph objects.')
             self._lG = myn
             
-            if not hasattr(self,'_T'):#self.T == None:
-                self._T = len(self._lG)
-            else:
-                assert self._T <= len(self._lG), 'Specified period is longer than dataset.'
+            if period is not None:
+                assert period <= len(self._lG), 'Specified period is longer than dataset.'
+                if period < len(self._lG):
+                    self._lG = self._lG[:period]
+            self._T = len(self._lG) 
             
             # Fill all graphs with all nodes
             snodes = set()
@@ -251,7 +266,7 @@ class tnet(object):
     @property
     def attributes(self):
         if hasattr(self,'_attributes'):
-            return dict(zip(self._nodelist,self._attributes))
+            return self._attributes
         else:
             return None
     
@@ -263,7 +278,18 @@ class tnet(object):
                 self._attributes.append(d[x])
             else:
                 self._attributes.append(None)
+                
+                
+    ##
+    ## PROPERTY nodelist
+    ##
+    @property
+    def nodelist(self):
+        return self._nodelist
         
+    @nodelist.setter
+    def nodelist(self,x):
+        assert False, 'You cannot manually edit list of nodes.'
                 
     
     def __str__ (self):
@@ -627,8 +653,29 @@ class threshold(object):
         finally:        
             return result
             
+    # BASIC PROPERTIES
+    @property
+    def N (self):
+        return self._N
+    @N.setter
+    def N (self,x):
+        print 'You cannnot manually set the number of nodes.'
+    @N.deleter
+    def N (self):
+        print 'You cannnot manually delete the number of nodes.'
+        
+    @property
+    def T (self):
+        return self._T
+    @T.setter
+    def T (self,x):
+        print 'You cannnot manually set the period.'
+    @T.deleter
+    def T (self):
+        print 'You cannnot manually delete the period.'
     
-    # average degree (useful for boundaries)
+    
+    # PROPERTY for average degree (useful for boundaries)
     @property
     def avg_k(self):
         if not hasattr(self,'_avg_k'):
@@ -645,7 +692,6 @@ class threshold(object):
             del self._avg_k
     
             
-            
     # PROPERTIES for choosing weights and functions
     @property
     def weighted(self):
@@ -656,6 +702,10 @@ class threshold(object):
         
         self._weighted = w
         self._f = self._df[(self._on,self._weighted)]
+        # delete variables that depend on this
+        del self.sr_agg
+        
+        
         
     @property
     def convergence_on(self):
@@ -668,6 +718,8 @@ class threshold(object):
         
         self._on = s
         self._f = self._df[(self._on,self._weighted)]
+        # delete variables that depend on this
+        del self.sr_agg
         
     # PROPERTIES for eval_max, tol, store
     @property
@@ -704,7 +756,50 @@ class threshold(object):
         self._lA = la
         self._N = la[0].shape[0]
         self._T = len(la)
+        # delete variables that depend on lA
         del self.avg_k
+        del self.A_agg
+        del self.sr_agg
+        
+    
+    # PROPERTY FOR AGGREGATED MATRIX
+    @property
+    def A_agg(self):
+        
+        if not hasattr(self,'_A_agg'):
+            self._A_agg = csr_matrix(self._lA[0])
+            for A in self._lA[1:]:
+                self._A_agg = self._A_agg + A
+                
+        return self._A_agg
+        
+    @A_agg.setter
+    def A_agg(self,x):
+        print 'You cannnot manually set the aggregated adjacency matrix.'
+        
+    @A_agg.deleter
+    def A_agg(self):
+        if hasattr(self,'_A_agg'):
+            del self._A_agg
+        
+    
+    # PROPERTY FOR THE AGGREGATED SPECTRAL RADIUS
+    @property
+    def sr_agg(self):
+        
+        if not hasattr(self,'_sr_agg'):
+            self._sr_agg = self._f(1.,1.,[self.A_agg],self._N,1,*self._args)
+        
+        return self._sr_agg
+        
+    @sr_agg.setter
+    def sr_agg(self,x):
+        print 'You cannnot manually set the spectral radius of aggregated adjacency matrix.'
+        
+    @sr_agg.deleter
+    def sr_agg(self):
+        if hasattr(self,'_sr_agg'):
+            del self._sr_agg
         
         
     
