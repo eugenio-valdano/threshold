@@ -10,7 +10,7 @@ import networkx as nx
 import numpy as np
 from scipy.sparse import csr_matrix, coo_matrix
 
-def DataFrame_to_lG(df, directed=False, weighted=False, source='source', target='target', time='time'):
+def DataFrame_to_lG(df, directed=False, source='source', target='target', time='time', weight=None):
     
     ti, tf = df[time].min(), df[time].max()+1
     
@@ -19,13 +19,6 @@ def DataFrame_to_lG(df, directed=False, weighted=False, source='source', target=
     else:
         graph = nx.Graph
         
-    if weighted:
-        assert 'weight' in df.columns, 'No "weight" column.'
-        attr = 'weight'
-        
-    else:
-        attr = None
-        
     lG = []
     for t in range(ti,tf):
         
@@ -33,7 +26,7 @@ def DataFrame_to_lG(df, directed=False, weighted=False, source='source', target=
         if cut.shape[0]==0:
             G = graph()
         else:
-            G = nx.from_pandas_dataframe(cut, source=source, target=target, edge_attr=attr, create_using=graph())
+            G = nx.from_pandas_dataframe(cut, source=source, target=target, edge_attr=weight, create_using=graph())
         
         lG.append(G)
         
@@ -41,7 +34,7 @@ def DataFrame_to_lG(df, directed=False, weighted=False, source='source', target=
     
     
     
-def DataFrame_to_lA(df, directed=False, source='source', target='target', time='time', weight='weight', dtype=np.float128, force_beg=None, force_end=None):
+def DataFrame_to_lA(df, directed=False, source='source', target='target', time='time', weight=None, dtype=np.float128, force_beg=None, force_end=None):
     
     """
     Assumes IDs are integers from 0 to N
@@ -64,9 +57,13 @@ def DataFrame_to_lA(df, directed=False, source='source', target='target', time='
             A = csr_matrix((N,N), dtype=dtype)
         else:
             
-            data = np.array(cut[weight])
             rows = np.array(cut[source])  
             cols = np.array(cut[target])
+            if weight is not None:
+                data = np.array(cut[weight])
+            else:
+                data = np.ones(shape=rows.shape, dtype=dtype)
+            
             if not directed:
                 data = np.concatenate((data,data))
                 rows, cols = np.concatenate((rows,cols)), np.concatenate((cols,rows))

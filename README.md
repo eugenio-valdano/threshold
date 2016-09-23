@@ -1,5 +1,5 @@
 # Computing the Epidemic Threshold on Temporal Networks
-Provides tools for computing the epidemic threshold on temporal network, as explained in paper
+Provides **Python** tools for computing the epidemic threshold on temporal network, as explained in paper
 
 [**Analytical Computation of The Epidemic Threshold on Temporal Networks**](http://journals.aps.org/prx/abstract/10.1103/PhysRevX.5.021005)
 
@@ -9,12 +9,19 @@ Valdano E, Ferreri L, Poletto C, Colizza V, *Phys Rev X* 5, 021005 2015.
 
 Further details on terms of use: see LICENSE
 
+## Content
+- `test_system.py` checks if your system has all the needed libraries.
+- `threshold.py` main module.
+- `threshold_util.py` additional methods for network handling.
 
-## Required software
-- Python
-- numpy
-- scipy
-- networkx
+
+## Required external modules
+- `numpy`
+- `scipy`
+- `networkx`
+- `pandas` (for `threshold_util.py`)
+
+Run `test_system.py` to check if you have everything you need.
 
 # Overview
 
@@ -32,38 +39,9 @@ path.append('<dir to threshold.py>')
 Then actually import the module as, for instance,
 
 ```python
-import threshold as th
+import threshold as thr # main module
+import threshold_util as thu # additional utils
 ```
-
-## test your system
-
-Check you have everything you need by executing
-
-```python
-th.test_system()
-```
-Hopefully you will get an output like this:
-
-```
----------
----------
-All required modules are present
----------
----------
-MODULE          TESTED FOR      YOURS           
-python          2.7.11          2.7.11           * Same version *
-scipy           0.17.0          0.17.0           * Same version *
-networkx        1.10            1.10             * Same version *
-geopy           1.11.0          1.11.0           * Same version *
-numpy           1.11.0          1.11.0           * Same version *
-pandas          0.18.0          0.18.0           * Same version *
---------
---------
---------
---------
-```
-
-*tested for* simply means those are the versions we are using, it does not mean it will not work for other versions. Warning: it is unlikely to work with networkx 1.7 or older.
 
 ## `tnet`: manage your temporal network
 
@@ -74,7 +52,7 @@ Class `tnet` is able to load a temporal network given in different formats:
 
 The network can then be loaded in class `tnet` as follows:
 
-`R = tnet(my_network)`
+`R = thr.tnet(my_network)`
 
 
 ### Arguments for `tnet`, with their default values
@@ -96,6 +74,8 @@ The network can then be loaded in class `tnet` as follows:
 | `weighted`  |  `True/False`  |
 | `lG`  |  list of `networkx` graphs  |
 | `lA`  |  list of adjacency matrices in `scipy.sparse.csr_matrix` format  |
+| `attributes`  |  node attributes  |
+| `nodelist`  |  list of nodes  |
 
 
 ## `threshold`: compute the threshold
@@ -116,7 +96,7 @@ myth = th.threshold(X)
 
 ##### related to the temporal network:
  
- - `weighted=None`. You have to specify it when you provide a list of adjacency matrices instead of a `tnet` object. You can specify it also with a `tnet` object if you want to override the `.weighted` attribute of the `tnet` object. (to know how weights are treated, see Supporting Information of ref Valdano et al.)
+ - `weighted=None`. You have to specify it when you provide a list of adjacency matrices instead of a `tnet` object. You can specify it also with a `tnet` object if you want to override the `.weighted` attribute of the `tnet` object. If the network itself is weighted, you still can set `weighted=False` here. It simply means it multiplies transmissibility directly to the adjacency matrices. To know more about weights, read [this article](http://epjb.epj.org/articles/epjb/abs/2015/12/b150620/b150620.html). `weighted=False` is more time-efficient than `weighted=True`.
  - `attributes=None`. It is ignored when `X` is a `tnet` object, as it will inherit the attributes from `X`. When `X` is a list of matrices, you can use this to provide a **`list`** of length `N` containing the attribute of each node. If you do not wish to set an attribute for node `i`, put `None` in the `list` at place `i`.
 
 You can access and edit `eval_max`,  `tol`, `store` and `weighted` as class attributes.
@@ -147,3 +127,40 @@ x = th.compute(mu, vmin=1e-3, vmax=1, maxiter=50, root_finder='brentq', **kwargs
 - `maxiter` is the maximum number of iterations of the root finding algorithm.
 - `root_finder` can be either `'brentq'` or `'bisect'`, referring to the functions in `scipy.optimize`. For further details see, for instance, [scipy documentation]( http://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html#scipy.optimize.brentq ).
 - Other keyword arguments are directly sent to the root finding scipy function (e.g. `xtol` and `rtol`).
+
+## `threshold_util`
+
+This module contains two functions: `DataFrame_to_lG` and `DataFrame_to_lA`. They turn a `pandas.DataFrame` object into a list of `networkx` graphs or `scipy.sparse` CSR matrix. The former is a suitable input for `threshold.tnet`, the latter for `threshold.threshold`.
+
+### `DataFrame_to_lG`
+
+```python
+lG = thu.DataFrame_to_lG(df, directed=False, weight=None, source='source', target='target', time='time')
+```
+
+- `df` is a `pandas.DataFrame`.
+- `directed` bool variable about (un)directedness.
+- `source` name of the column of source nodes.
+- `target` name of the column of target nodes.
+- `time` name of the column with timestamps.
+- `weight` can be `None` (unweighted network) or a string with the name of the column to be interpreted as weights.
+
+It returns a list of `networkx` `Graph` or `DiGraph` objects.
+
+### `DataFrame_to_lA`
+
+**Assumes node id's are integers from 0 to N-1**, where N is the number of nodes.
+
+```python
+lA = thu.DataFrame_to_lA(df, directed=False, source='source', target='target', time='time', weight='weight', dtype=np.float128, force_beg=None, force_end=None)
+```
+
+- `df` is a `pandas.DataFrame`.
+- `directed` bool variable about (un)directedness.
+- `source` name of the column of source nodes.
+- `target` name of the column of target nodes.
+- `time` name of the column with timestamps.
+- `weight` can be `None` (unweighted network) or a string with the name of the column to be interpreted as weights.
+- `force_beg` if not `None`, will discard all timesteps smaller than this.
+- `force_end` if not `None`, will discard all timesteps larger than this.
+
