@@ -788,7 +788,7 @@ class threshold(object):
     def sr_agg(self):
         
         if not hasattr(self,'_sr_agg'):
-            self._sr_agg = self._f(1.,1.,[self.A_agg],self._N,1,*self._args)
+            self._sr_agg = self._f(1.,1.,[self.A_agg/float(self.T)],self._N,1,*self._args)
         
         return self._sr_agg
         
