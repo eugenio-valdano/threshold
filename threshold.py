@@ -556,6 +556,48 @@ def psr2w(ladda, mu, lA, N, T, valumax, tolerance, store):
     raise ThresholdError,'Power method did not converge.'
     
     
+
+# for the aggregated spectral radius
+def psr2uw_agg(A, N, valumax, tolerance, store):
+    
+    # stop when the L1 norm of (v_{a}-v_{a-1}) is below tolerance, where a is the a-th loop on the period
+    
+    # same data type as the adjacency matrices
+    dtype = type(A[0,0])
+    
+    # Initialize eigenvector register
+    MV = np.empty(shape=(N,store), dtype=dtype)
+    # first vector is a versor with the equal components:
+    MV[:,0] = np.array([1./np.sqrt(N)]*N, dtype=dtype)
+    # register counter
+    c = 0
+    # vector to work on:
+    v = MV[:,0].copy()
+    
+    while c < valumax:
+        # Perform iteration:
+        v = A.dot(v)
+            
+        # spectral radius
+        sr = np.dot(MV[:,c%store],v)
+        
+        # normalize
+        v = v/np.linalg.norm(v)
+    
+        # Compute tolerance, and return if reached:
+        delta = np.sum( np.abs(MV[:,c%store]-v) )
+        if delta < tolerance:
+            # return spectral radius^(1/T) - 1, as usual.
+            return sr - 1. #, v/np.linalg.norm(v)
+        
+        # increment index, and update storage
+        c += 1 
+        MV[:,c%store] = v.copy()
+            
+    # if it goes out of the loop without returning the sr
+    raise ThresholdError,'Power method did not converge.'    
+    
+    
     
     
 class threshold(object):
@@ -652,6 +694,34 @@ class threshold(object):
 
         finally:        
             return result
+            
+            
+    # Compute spectral radius in specific point
+    # additional kwargs (like xtol or rtol) will be passed directly to the root finding routine. See scipy documentation
+    def sr_point(self, ladda, mu2, maxiter=50, **kwargs):
+        
+        # recovery rate(s)
+        if type(mu2) == dict:
+            # heterogeneous mu
+            assert hasattr(self,'_attributes'), 'No attributes given.'
+            mu = np.full((self._N,), mu2['default'], dtype=self._dtype)
+            for i in range(self._N):
+                if self._attributes[i] is not None:
+                    mu[i] = mu2[self._attributes[i]]
+        else:
+            # homogeneous mu
+            mu = mu2
+           
+        try:
+            result = self._f(ladda,mu,self._lA,self._N,self._T,*self._args)
+        except ThresholdError, err_string:
+            result = np.nan
+            print err_string
+        finally:
+            return result
+            
+            
+            
             
     # BASIC PROPERTIES
     @property
@@ -788,7 +858,9 @@ class threshold(object):
     def sr_agg(self):
         
         if not hasattr(self,'_sr_agg'):
-            self._sr_agg = self._f(1.,1.,[self.A_agg/float(self.T)],self._N,1,*self._args)
+            thisargs = list(self._args)
+            thisargs[0] = 10*thisargs[0]
+            self._sr_agg = psr2uw_agg(self.A_agg/float(self.T),self._N,*thisargs )
         
         return self._sr_agg
         
