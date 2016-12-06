@@ -10,3 +10,7 @@
 *.pyc
 
 .DS_Store
+
+*.egg-info*
+
+dist
