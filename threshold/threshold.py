@@ -7,6 +7,7 @@ from scipy.optimize import brentq,bisect
 #from sys import version_info
 #from scipy import __version__ as vers_scipy
 from warnings import warn
+import traceback, logging
 
 
 
@@ -174,6 +175,8 @@ class tnet(object):
         ct = 0
         while len(self._lG[ct].edges()) == 0:
             ct += 1
+            if ct==self.T:
+                assert False, 'Empty network: no edges at any time.'
         if 'weight' in self._lG[ct].edges(data=True)[0][2] : 
             self._weighted = True
         else:
@@ -344,7 +347,7 @@ class tnet(object):
 # PSR1
 
 # unweighted
-def psr1uw(ladda, mu, lA, N, T, valumax, tolerance, store):
+def psr1uw(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
     
     # parameters    
     #valumax = kwargs['valumax'] # 1000
@@ -394,13 +397,13 @@ def psr1uw(ladda, mu, lA, N, T, valumax, tolerance, store):
         if fluct >= tolerance:
             raise ThresholdError, 'Power method did not converge.'
             
-    return leval[-1] - 1.
+    return leval[-1] - sr_target
 
 
 
 
 # weighted
-def psr1w(ladda, mu, lA, N, T, valumax, tolerance, store):
+def psr1w(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
     
     # parameters    
     #valumax = kwargs['valumax'] # 1000
@@ -449,14 +452,14 @@ def psr1w(ladda, mu, lA, N, T, valumax, tolerance, store):
         fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
         if fluct >= tolerance:
             raise ThresholdError,'Power method did not converge.'
-    return leval[-1] - 1.
+    return leval[-1] - sr_target
 
 
 
 # PSR2
 
 # unweighted
-def psr2uw(ladda, mu, lA, N, T, valumax, tolerance, store):
+def psr2uw(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
     
     # stop when the L1 norm of (v_{a}-v_{a-1}) is below tolerance, where a is the a-th loop on the period
     
@@ -464,6 +467,8 @@ def psr2uw(ladda, mu, lA, N, T, valumax, tolerance, store):
     #valumax = kwargs['valumax'] # 20000
     #tolerance = kwargs['tolerance'] # 1e-6
     #store = kwargs['store'] # 10
+    # sr_target is usually=1. It's the target value for the spectral radius
+    # Unless I'm discarding some empty timestep, in that case I want it to be (1-mu)^{-tau} where tau is how many I discard
     
     rootT = 1.0 / float(T)
     # same data type as the adjacency matrices
@@ -495,7 +500,7 @@ def psr2uw(ladda, mu, lA, N, T, valumax, tolerance, store):
             delta = np.sum( np.abs(MV[:,c%store]-v) )
             if delta < tolerance:
                 # return spectral radius^(1/T) - 1, as usual.
-                return sr**rootT - 1. #, v/np.linalg.norm(v)
+                return sr**rootT - sr_target #, v/np.linalg.norm(v)
             
             # increment index, and update storage
             c += 1
@@ -506,7 +511,7 @@ def psr2uw(ladda, mu, lA, N, T, valumax, tolerance, store):
     
     
 # weighted
-def psr2w(ladda, mu, lA, N, T, valumax, tolerance, store):
+def psr2w(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
     
     # stop when the L1 norm of (v_{a}-v_{a-1}) is below tolerance, where a is the a-th loop on the period
     
@@ -546,7 +551,7 @@ def psr2w(ladda, mu, lA, N, T, valumax, tolerance, store):
             delta = np.sum( np.abs(MV[:,c%store]-v) )
             if delta < tolerance:
                 # return spectral radius^(1/T) - 1, as usual.
-                return sr**rootT - 1. #, v/np.linalg.norm(v)
+                return sr**rootT - sr_target #, v/np.linalg.norm(v)
             
             # increment index, and update storage
             c += 1
@@ -588,7 +593,7 @@ def psr2uw_agg(A, N, valumax, tolerance, store):
         delta = np.sum( np.abs(MV[:,c%store]-v) )
         if delta < tolerance:
             # return spectral radius^(1/T) - 1, as usual.
-            return sr - 1. #, v/np.linalg.norm(v)
+            return sr
         
         # increment index, and update storage
         c += 1 
@@ -609,10 +614,10 @@ class threshold(object):
     
     # weighted can be None, True, False
     # attributes has to be given only if X is not a tnet
-    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, weighted=None, convergence_on_eigenvector=True, attributes=None):
+    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None):
         
         # check the type of input, and store accordingly
-        if str(type(X)) == "<class 'threshold.tnet'>":
+        if str(type(X)) == "<class 'threshold.threshold.tnet'>":
             # it's a tnet
             self._lA = X.lA
             self._N = X.N
@@ -638,7 +643,7 @@ class threshold(object):
         self._dtype = type(self._lA[0][0,0])
         
         
-        self._args = (eval_max, tol, store)
+        self._args = [eval_max, tol, store]
             
         if convergence_on_eigenvector:
             self._on = 'eigenvector'
@@ -647,9 +652,13 @@ class threshold(object):
         
         # Choose function to use (_f)
         self._f = self._df[(self._on,self._weighted)]
+        
+        # Additional time
+        self._addtime = additional_time
                 
                 
     # additional kwargs (like xtol or rtol) will be passed directly to the root finding routine. See scipy documentation
+    # additional_time is the number of empty time steps you want to give. 
     def compute(self, mu2, vmin=0.001, vmax=1., maxiter=50, root_finder='brentq', **kwargs):
         
         # recovery rate(s)
@@ -660,6 +669,8 @@ class threshold(object):
             for i in range(self._N):
                 if self._attributes[i] is not None:
                     mu[i] = mu2[self._attributes[i]]
+                    
+            assert self._addtime==0, 'You cannot give additional time when mu is heterogeneous'
             
         else:
             # homogeneous mu
@@ -672,9 +683,14 @@ class threshold(object):
         else:
             raise ThresholdError,'method for root finding '+root_finder+' is not supported.'
             
+        if self._addtime == 0:
+            sr_target = 1.
+        else:
+            sr_target = np.power( 1.-mu, -float(self._addtime)/float(self.T) )
+            
         # compute threshold, and try all possible errors
         try:
-            result, rr = findroot(self._f, vmin, vmax, args=(mu,self._lA,self._N,self._T)+self._args, maxiter=maxiter, full_output=True, disp=False, **kwargs)
+            result, rr = findroot(self._f, vmin, vmax, args=tuple([mu,self._lA,self._N,self._T]+self._args+[sr_target]), maxiter=maxiter, full_output=True, disp=False, **kwargs)
             
             if not rr.converged:
                 raise ThresholdError, 'Optimization did not converge.'
@@ -686,10 +702,16 @@ class threshold(object):
             
         # Error: interval is likely not to contain zeros
         except ValueError:
-            sr_min = self._f(vmin,mu,self._lA,self._N,self._T,*self._args)
-            sr_max = self._f(vmax,mu,self._lA,self._N,self._T,*self._args)
+            arghi = self._args + [sr_target]
+            sr_min = self._f(vmin,mu,self._lA,self._N,self._T,*arghi)
+            sr_max = self._f(vmax,mu,self._lA,self._N,self._T,*arghi)
             spuz = 'ValueError: Interval may not contain zeros (or other ValueError). f({:.5f})={:.5f}; f({:.5f})={:.5f}'.format(vmin, sr_min,vmax, sr_max)
             print spuz 
+            result = np.nan
+            
+        # catch any other exception
+        except Exception as ecc:
+            logging.error(traceback.format_exc())
             result = np.nan
 
         finally:        
@@ -708,12 +730,21 @@ class threshold(object):
             for i in range(self._N):
                 if self._attributes[i] is not None:
                     mu[i] = mu2[self._attributes[i]]
+                    
+            assert self._addtime==0, 'You cannot give additional time when mu is heterogeneous'
         else:
             # homogeneous mu
             mu = mu2
+            
+        if self._addtime == 0:
+            sr_target = 1.
+        else:
+            sr_target = np.power( 1.-mu, -float(self._addtime)/float(self.T) )
+            
+        arghi = self._args + [sr_target]
            
         try:
-            result = self._f(ladda,mu,self._lA,self._N,self._T,*self._args)
+            result = self._f(ladda,mu,self._lA,self._N,self._T,*arghi)
         except ThresholdError, err_string:
             result = np.nan
             print err_string
@@ -773,7 +804,7 @@ class threshold(object):
         self._weighted = w
         self._f = self._df[(self._on,self._weighted)]
         # delete variables that depend on this
-        del self.sr_agg
+        del self.avg_sr
         
         
         
@@ -789,9 +820,9 @@ class threshold(object):
         self._on = s
         self._f = self._df[(self._on,self._weighted)]
         # delete variables that depend on this
-        del self.sr_agg
+        del self.avg_sr
         
-    # PROPERTIES for eval_max, tol, store
+    # PROPERTIES for eval_max, tol, store, sr_target
     @property
     def eval_max(self):
         return self._args[0]
@@ -815,6 +846,20 @@ class threshold(object):
     @store.setter
     def store(self,x):
         self._args[2] = x
+       
+       
+    @property
+    def additional_time(self):
+        return self._addtime
+        
+    @additional_time.setter
+    def additional_time(self,x):
+        self._addtime = x
+        
+    @additional_time.deleter
+    def additional_time(self):
+        print 'Resetting additional time back to zero.'
+        self._addtime = 0
         
     # PROPERTY FOR RESETTING ADJACENCY MATRICES
     @property
@@ -828,50 +873,51 @@ class threshold(object):
         self._T = len(la)
         # delete variables that depend on lA
         del self.avg_k
-        del self.A_agg
-        del self.sr_agg
+        del self.avg_A
+        del self.avg_sr
         
     
     # PROPERTY FOR AGGREGATED MATRIX
     @property
-    def A_agg(self):
+    def avg_A(self):
         
-        if not hasattr(self,'_A_agg'):
-            self._A_agg = csr_matrix(self._lA[0])
+        if not hasattr(self,'_avg_A'):
+            self._avg_A = csr_matrix(self._lA[0])
             for A in self._lA[1:]:
-                self._A_agg = self._A_agg + A
+                self._avg_A = self._avg_A + A
                 
-        return self._A_agg
+        return self._avg_A/float(self.T)
         
-    @A_agg.setter
-    def A_agg(self,x):
-        print 'You cannnot manually set the aggregated adjacency matrix.'
+    @avg_A.setter
+    def avg_A(self,x):
+        print 'You cannnot manually set the average adjacency matrix.'
         
-    @A_agg.deleter
-    def A_agg(self):
-        if hasattr(self,'_A_agg'):
-            del self._A_agg
+    @avg_A.deleter
+    def avg_A(self):
+        if hasattr(self,'_avg_A'):
+            del self._avg_A
         
     
     # PROPERTY FOR THE AGGREGATED SPECTRAL RADIUS
     @property
-    def sr_agg(self):
+    def avg_sr(self):
         
-        if not hasattr(self,'_sr_agg'):
+        if not hasattr(self,'_avg_sr'):
             thisargs = list(self._args)
-            thisargs[0] = 10*thisargs[0]
-            self._sr_agg = psr2uw_agg(self.A_agg/float(self.T),self._N,*thisargs )
+            thisargs[0] = 100*thisargs[0] # increase evaluations
+            thisargs[1] = 100*thisargs[1] # decrease precision
+            self._avg_sr = psr2uw_agg(self.avg_A,self._N,*thisargs )
         
-        return self._sr_agg
+        return self._avg_sr
         
-    @sr_agg.setter
-    def sr_agg(self,x):
-        print 'You cannnot manually set the spectral radius of aggregated adjacency matrix.'
+    @avg_sr.setter
+    def avg_sr(self,x):
+        print 'You cannnot manually set the spectral radius of average adjacency matrix.'
         
-    @sr_agg.deleter
-    def sr_agg(self):
-        if hasattr(self,'_sr_agg'):
-            del self._sr_agg
+    @avg_sr.deleter
+    def avg_sr(self):
+        if hasattr(self,'_avg_sr'):
+            del self._avg_sr
         
         
     
@@ -889,6 +935,9 @@ class threshold(object):
         
         # convergence eigenvector/eigenvalue
         spoutp += 'convergence on: {}\n'.format(self.convergence_on)
+        
+        # additional time
+        spoutp += 'additional time steps: {}\n'.format(self.additional_time)
         
         return spoutp
         

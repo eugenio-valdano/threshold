@@ -38,6 +38,7 @@ def DataFrame_to_lA(df, directed=False, source='source', target='target', time='
     
     """
     Assumes IDs are integers from 0 to N
+    [force_beg,force_end)
     """
     
     ti, tf = df[time].min(), df[time].max()+1
