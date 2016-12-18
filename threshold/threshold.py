@@ -10,18 +10,32 @@ from warnings import warn
 import traceback, logging
 
 
+# functions for computing the spectral radius
+from utilp import psr1uw, psr1w, psr2uw, psr2w, ThresholdError
+try:
+    from utilc import psr2uw as psr2uw_c
+except ImportError:
+    warn('CYTHON CANNOT BE IMPORTED!')
+    #psr2uw_c = psr2uw
+
+
+def lA_to_ars(lA):
+    """
+    time t:
+    lA[t].indptr == l_indptr[t*(N+1):(t+1)*(N+1)]
+    lA[t].indices == l_indices[l_place[t]:l_place[t+1]]
+    lA[t].data == l_data[l_place[t]:l_place[t+1]]
+    """
+    l_indptr = np.concatenate([ A.indptr for A in lA ])
+    l_indices = np.concatenate([ A.indices for A in lA ])
+    l_data = np.concatenate([ A.data for A in lA ])
+    l_place = np.cumsum( np.array([0]+[A.indices.shape[0] for A in lA]), dtype=np.int32 )
+    return (l_indptr, l_indices, l_data, l_place)
+
+
 
 
 class NetworkFormatError(Exception):
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
-
-
-
-
-class ThresholdError(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):
@@ -337,272 +351,7 @@ class tnet(object):
 
 
 
-# Now functions related to threshold computation.
 
-
-# There are two kinds of algorithm: psr1 and psr2 (psr=power spectral radius). They're both weighted and unweighted, so psr1uw, psr1w, psr2uw, psr2w
-# psr1 is more crude: it checks convergence on the value of the spectral radius itself.
-# psr2 is checks convergence on the principal eigenvector
-
-# PSR1
-
-# unweighted
-def psr1uw(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
-    
-    # parameters    
-    #valumax = kwargs['valumax'] # 1000
-    #tolerance = kwargs['tolerance'] # 1e-5
-    #store = kwargs['store'] # 10
-    
-    rootT = 1.0 / float(T)
-    # same data type as the adjacency matrices
-    dtype = type(lA[0][0,0])
-    
-    # Initialize
-    leval = np.empty(shape=(store,), dtype=dtype)
-    ceval = 0
-    v0 = 0.9*np.random.random(N) + 0.1
-    v0 = np.array(v0, dtype=dtype)
-    v = v0.copy()
-    vold = v.copy()
-    interrupt = False # When convergence is reached, it becomes True.
-    
-    itmax = T * valumax
-    for k in range(itmax):
-        # Perform iteration:
-        v = ladda*lA[k%T].dot(v) + (1.-mu)*v
-        
-        # Whether period is completed:
-        if k%T == T-1:
-            #autoval = np.dot(vold,v)
-            leval[ceval%store] = np.dot(vold,v)**rootT
-            ceval += 1
-            #leval.append(autoval**rootT)
-            
-            # Check convergence
-            if ceval >= store:
-                fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
-            else:
-                fluct = 1. + tolerance
-            if fluct < tolerance:
-                interrupt = True
-                break
-            mnorm = np.linalg.norm(v)
-            v = v / mnorm
-            vold = v.copy()
-    
-    # If never interrupted, check now convergence.
-    if not interrupt: 
-        fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
-        if fluct >= tolerance:
-            raise ThresholdError, 'Power method did not converge.'
-            
-    return leval[-1] - sr_target
-
-
-
-
-# weighted
-def psr1w(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
-    
-    # parameters    
-    #valumax = kwargs['valumax'] # 1000
-    #tolerance = kwargs['tolerance'] # 1e-5
-    #store = kwargs['store'] # 10
-    
-    rootT = 1.0 / float(T)
-    # same data type as the adjacency matrices
-    dtype = type(lA[0][0,0])
-    loglad = np.log(1.-ladda)
-    
-    # Initialize
-    leval = np.empty(shape=(store,), dtype=dtype)
-    ceval = 0
-    v0 = 0.9*np.random.random(N) + 0.1
-    v0 = np.array(v0, dtype=dtype)
-    v = v0.copy()
-    vold = v.copy()
-    interrupt = False # When convergence is reached, it becomes True.
-    
-    itmax = T * valumax
-    for k in range(itmax):
-        
-        # Perform iteration. Meaning of function expm1: -(loglad*lA[k%T]).expm1() = 1-(1-ladda)^Aij
-        v = -(loglad*lA[k%T]).expm1().dot(v) + (1.-mu)*v
-        
-        # Whether period is completed
-        if k%T == T-1: 
-            leval[ceval%store] = np.dot(vold,v)**rootT
-            ceval += 1
-            
-            # Check convergence
-            if ceval >= store:
-                fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
-            else:
-                fluct = 1. + tolerance
-            if fluct < tolerance:
-                interrupt = True
-                break
-            mnorm = np.linalg.norm(v)
-            v = v / mnorm
-            vold = v.copy()
-    
-    # If never interrupted, check now convergence.
-    if not interrupt: 
-        fluct = ( np.max(leval) - np.min(leval) ) / np.mean(leval)
-        if fluct >= tolerance:
-            raise ThresholdError,'Power method did not converge.'
-    return leval[-1] - sr_target
-
-
-
-# PSR2
-
-# unweighted
-def psr2uw(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
-    
-    # stop when the L1 norm of (v_{a}-v_{a-1}) is below tolerance, where a is the a-th loop on the period
-    
-    # parameters    
-    #valumax = kwargs['valumax'] # 20000
-    #tolerance = kwargs['tolerance'] # 1e-6
-    #store = kwargs['store'] # 10
-    # sr_target is usually=1. It's the target value for the spectral radius
-    # Unless I'm discarding some empty timestep, in that case I want it to be (1-mu)^{-tau} where tau is how many I discard
-    
-    rootT = 1.0 / float(T)
-    # same data type as the adjacency matrices
-    dtype = type(lA[0][0,0])
-    
-    # Initialize eigenvector register
-    MV = np.empty(shape=(N,store), dtype=dtype)
-    # first vector is a versor with the equal components:
-    MV[:,0] = np.array([1./np.sqrt(N)]*N, dtype=dtype)
-    # register counter
-    c = 0
-    # vector to work on:
-    v = MV[:,c].copy()
-    
-    for k in range(T*valumax):
-        # Perform iteration:
-        v = ladda*lA[k%T].dot(v) + (1.-mu)*v
-        
-        # Whether period is completed:
-        if k%T == T-1:
-            
-            # spectral radius
-            sr = np.dot(MV[:,c%store],v)
-            
-            # normalize
-            v = v/np.linalg.norm(v)
-        
-            # Compute tolerance, and return if reached:
-            delta = np.sum( np.abs(MV[:,c%store]-v) )
-            if delta < tolerance:
-                # return spectral radius^(1/T) - 1, as usual.
-                return sr**rootT - sr_target #, v/np.linalg.norm(v)
-            
-            # increment index, and update storage
-            c += 1
-            MV[:,c%store] = v.copy()
-            
-    # if it goes out of the loop without returning the sr
-    raise ThresholdError,'Power method did not converge.'
-    
-    
-# weighted
-def psr2w(ladda, mu, lA, N, T, valumax, tolerance, store, sr_target):
-    
-    # stop when the L1 norm of (v_{a}-v_{a-1}) is below tolerance, where a is the a-th loop on the period
-    
-    # parameters    
-    #valumax = kwargs['valumax'] # 20000
-    #tolerance = kwargs['tolerance'] # 1e-6
-    #store = kwargs['store'] # 10
-    
-    loglad = np.log(1.-ladda)
-    rootT = 1.0 / float(T)
-    # same data type as the adjacency matrices
-    dtype = type(lA[0][0,0])
-    
-    # Initialize eigenvector register
-    MV = np.empty(shape=(N,store), dtype=dtype)
-    # first vector is a versor with the equal components:
-    MV[:,0] = np.array([1./np.sqrt(N)]*N, dtype=dtype)
-    # register counter
-    c = 0
-    # vector to work on:
-    v = MV[:,c].copy()
-    
-    for k in range(T*valumax):
-        # Perform iteration:
-        v = -(loglad*lA[k%T]).expm1().dot(v) + (1.-mu)*v
-        
-        # Whether period is completed:
-        if k%T == T-1:
-            
-            # spectral radius
-            sr = np.dot(MV[:,c%store],v)
-            
-            # normalize
-            v = v/np.linalg.norm(v)
-        
-            # Compute tolerance, and return if reached:
-            delta = np.sum( np.abs(MV[:,c%store]-v) )
-            if delta < tolerance:
-                # return spectral radius^(1/T) - 1, as usual.
-                return sr**rootT - sr_target #, v/np.linalg.norm(v)
-            
-            # increment index, and update storage
-            c += 1
-            MV[:,c%store] = v.copy()
-            
-    # if it goes out of the loop without returning the sr
-    raise ThresholdError,'Power method did not converge.'
-    
-    
-
-# for the aggregated spectral radius
-def psr2uw_agg(A, N, valumax, tolerance, store):
-    
-    # stop when the L1 norm of (v_{a}-v_{a-1}) is below tolerance, where a is the a-th loop on the period
-    
-    # same data type as the adjacency matrices
-    dtype = type(A[0,0])
-    
-    # Initialize eigenvector register
-    MV = np.empty(shape=(N,store), dtype=dtype)
-    # first vector is a versor with the equal components:
-    MV[:,0] = np.array([1./np.sqrt(N)]*N, dtype=dtype)
-    # register counter
-    c = 0
-    # vector to work on:
-    v = MV[:,0].copy()
-    
-    while c < valumax:
-        # Perform iteration:
-        v = A.dot(v)
-            
-        # spectral radius
-        sr = np.dot(MV[:,c%store],v)
-        
-        # normalize
-        v = v/np.linalg.norm(v)
-    
-        # Compute tolerance, and return if reached:
-        delta = np.sum( np.abs(MV[:,c%store]-v) )
-        if delta < tolerance:
-            # return spectral radius^(1/T) - 1, as usual.
-            return sr
-        
-        # increment index, and update storage
-        c += 1 
-        MV[:,c%store] = v.copy()
-            
-    # if it goes out of the loop without returning the sr
-    raise ThresholdError,'Power method did not converge.'    
-    
-    
     
     
 class threshold(object):
@@ -614,7 +363,7 @@ class threshold(object):
     
     # weighted can be None, True, False
     # attributes has to be given only if X is not a tnet
-    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None):
+    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None, cython=False):
         
         # check the type of input, and store accordingly
         if str(type(X)) == "<class 'threshold.threshold.tnet'>":
@@ -649,9 +398,17 @@ class threshold(object):
             self._on = 'eigenvector'
         else:
             self._on = 'eigenvalue'
-        
-        # Choose function to use (_f)
-        self._f = self._df[(self._on,self._weighted)]
+
+        # cython. REMEMBER 1) cython overrides the choice of weighted and 1/2 convergence functions. 2) if cython module could not be loaded, ERROR
+        self.cython = cython
+
+        ###
+        if self.cython:
+            self._f = lambda ladda, mu, sr_target : psr2uw_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
+                                                             self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+        else:
+            self._f = lambda ladda, mu, sr_target : self._df[(self._on,self._weighted)](ladda, mu, self.lA, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+        ###
         
         # Additional time
         self._addtime = additional_time
@@ -690,7 +447,7 @@ class threshold(object):
             
         # compute threshold, and try all possible errors
         try:
-            result, rr = findroot(self._f, vmin, vmax, args=tuple([mu,self._lA,self._N,self._T]+self._args+[sr_target]), maxiter=maxiter, full_output=True, disp=False, **kwargs)
+            result, rr = findroot(self._f, vmin, vmax, args=(mu, sr_target), maxiter=maxiter, full_output=True, disp=False, **kwargs)
             
             if not rr.converged:
                 raise ThresholdError, 'Optimization did not converge.'
@@ -702,9 +459,8 @@ class threshold(object):
             
         # Error: interval is likely not to contain zeros
         except ValueError:
-            arghi = self._args + [sr_target]
-            sr_min = self._f(vmin,mu,self._lA,self._N,self._T,*arghi)
-            sr_max = self._f(vmax,mu,self._lA,self._N,self._T,*arghi)
+            sr_min = self._f(vmin,mu,sr_target)
+            sr_max = self._f(vmax,mu,sr_target)
             spuz = 'ValueError: Interval may not contain zeros (or other ValueError). f({:.5f})={:.5f}; f({:.5f})={:.5f}'.format(vmin, sr_min,vmax, sr_max)
             print spuz 
             result = np.nan
@@ -740,11 +496,10 @@ class threshold(object):
             sr_target = 1.
         else:
             sr_target = np.power( 1.-mu, -float(self._addtime)/float(self.T) )
-            
-        arghi = self._args + [sr_target]
+
            
         try:
-            result = self._f(ladda,mu,self._lA,self._N,self._T,*arghi)
+            result = self._f(ladda,mu,sr_target)
         except ThresholdError, err_string:
             result = np.nan
             print err_string
@@ -800,11 +555,15 @@ class threshold(object):
     
     @weighted.setter
     def weighted(self,w): # can be true/false
-        
-        self._weighted = w
-        self._f = self._df[(self._on,self._weighted)]
-        # delete variables that depend on this
-        del self.avg_sr
+
+        if not self.cython:
+            self._weighted = w
+            self._f = lambda ladda, mu, sr_target: self._df[(self._on, self._weighted)](ladda, mu, self.lA, self.N,
+                                                                                        self.T, self.eval_max, self.tol, self.store, sr_target)
+            # delete variables that depend on this
+            del self.avg_sr
+        else:
+            warn('Cython is on, so I am ignoring this.')
         
         
         
@@ -813,15 +572,20 @@ class threshold(object):
         return self._on
         
     @convergence_on.setter
-    def convergence_on(self,s):
+    def convergence_on(self, s):
         
         assert s in ('eigenvalue','eigenvector'), 'Must be "eigenvalue" or "eigenvector".'
-        
-        self._on = s
-        self._f = self._df[(self._on,self._weighted)]
-        # delete variables that depend on this
-        del self.avg_sr
-        
+
+        if not self.cython:
+            self._on = s
+            self._f = lambda ladda, mu, sr_target: self._df[(self._on, self._weighted)](ladda, mu, self.lA, self.N, self.T,
+                                                                                        self.eval_max, self.tol, self.store, sr_target)
+            # delete variables that depend on this
+            del self.avg_sr
+        else:
+            warn('Cython is on, so I am ignoring this.')
+
+
     # PROPERTIES for eval_max, tol, store, sr_target
     @property
     def eval_max(self):
@@ -875,6 +639,35 @@ class threshold(object):
         del self.avg_k
         del self.avg_A
         del self.avg_sr
+
+
+    ### USED BY CYTHON
+    @property
+    def l_indptr(self):
+        if not hasattr(self, '_l_indptr'):
+            self._l_indptr, self._l_indices, self._l_data, self._l_place = lA_to_ars(self.lA)
+        return self._l_indptr
+
+    @property
+    def l_indices(self):
+        if not hasattr(self, '_l_indices'):
+            self._l_indptr, self._l_indices, self._l_data, self._l_place = lA_to_ars(self.lA)
+        return self._l_indices
+
+    @property
+    def l_data(self):
+        if not hasattr(self, '_l_data'):
+            self._l_indptr, self._l_indices, self._l_data, self._l_place = lA_to_ars(self.lA)
+        return self._l_data
+
+    @property
+    def l_place(self):
+        if not hasattr(self, '_l_place'):
+            self._l_indptr, self._l_indices, self._l_data, self._l_place = lA_to_ars(self.lA)
+        return self._l_place
+
+
+
         
     
     # PROPERTY FOR AGGREGATED MATRIX

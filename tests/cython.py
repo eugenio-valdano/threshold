@@ -1,7 +1,3 @@
-"""
-Tests the library.
-"""
-
 from pandas import read_csv
 import numpy as np
 import threshold.threshold as thr
@@ -14,7 +10,7 @@ df = read_csv('tests/net.csv', sep=',')
 lA = thu.DataFrame_to_lA(df, weight='weight')
 
 # threshold object
-Z = thr.threshold(lA, weighted=False)
+Z = thr.threshold(lA, weighted=False, cython=True)
 
 # compute threshold
 lc = Z.compute(0.5)
@@ -23,12 +19,9 @@ lc = Z.compute(0.5)
 import unittest
 class myTest(unittest.TestCase):
 
-    def test_upload(self):
-        self.assertTrue(Z.N==200)
-
     def test_comput(self):
-        print 'threshold: {:.6f}'.format(lc)
-        self.assertTrue(np.abs(lc-0.0456174793566)<1e-5)
+        print 'threshold with CYTHON: {:.6f}'.format(lc)
+        self.assertTrue(np.abs(lc-0.0459449335536)<1e-5)
 
 
 
