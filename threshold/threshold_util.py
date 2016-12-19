@@ -48,11 +48,14 @@ def DataFrame_to_lA(df, directed=False, source='source', target='target', time='
         force_beg = ti
     if force_end is None:
         force_end = tf
+
+    assert df.query('time>={} and time<{}'.format(ti,tf)).shape[0] > 0, 'The network in the selected time range is empty.'
     
     lA = []
     for t in range(force_beg,force_end):
         
-        cut = df[df[time]==t]
+        cut = df[df[time] == t]
+
         if cut.shape[0]==0:
             # empty timestep
             A = csr_matrix((N,N), dtype=dtype)
