@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 from Cython.Build import cythonize
 
-setup(name="Epidemic threshold",
+setup(name="Epidemic_Threshold",
       version="1.0",
       description="Compute the epidemic threshold on time-evolving networks",
       author="Eugenio Valdano",
