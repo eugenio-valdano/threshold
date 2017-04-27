@@ -20,7 +20,7 @@ import unittest
 class myTest(unittest.TestCase):
 
     def test_comput(self):
-        print 'threshold with CYTHON: {:.6f}'.format(lc)
+        print 'threshold with CYTHON (when available): {:.6f}'.format(lc)
         self.assertTrue(np.abs(lc-0.0459449335536)<1e-3)
 
 

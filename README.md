@@ -1,5 +1,5 @@
 # Computing the Epidemic Threshold on Temporal Networks
-Provides **Python** tools for computing the epidemic threshold on temporal network, as explained in paper
+A **Python** library for computing the epidemic threshold on temporal network, as explained in paper
 
 [**Analytical Computation of The Epidemic Threshold on Temporal Networks**](http://journals.aps.org/prx/abstract/10.1103/PhysRevX.5.021005)
 
@@ -9,124 +9,178 @@ Valdano E, Ferreri L, Poletto C, Colizza V, *Phys Rev X* 5, 021005 2015.
 
 Further details on terms of use: see LICENSE
 
-## Content
-- `test_system.py` checks if your system has all the needed libraries.
-- `threshold.py` main module.
-- `threshold_util.py` additional methods for network handling.
+# Intro
+
+This version has been restructured using the Python module `setuptools`. This means that the library will install just like one you would get through `pip`.
+
+The package will look for the needed dependencies, and try to install them if necessary, through pip. However, there can be issues sometimes. For instance, if you're using [Anaconda](https://www.continuum.io/) (and **I recommend you do** use it, especially if you're starting with Python), there are conflicts, as packages are usually installed through `conda`. So it is always **better to check beforehand if you have the packages needed**. They are listed in `requirements.txt`, along with their versions.
+
+# Install
+
+* Download the entire directory,
+* `cd` inside it (where `setup.py` is),
+* execute `python setup.py test`. You should get an output like this:
+
+```
+running test
+running egg_info
+writing requirements to Epidemic_Threshold.egg-info/requires.txt
+writing Epidemic_Threshold.egg-info/PKG-INFO
+writing top-level names to Epidemic_Threshold.egg-info/top_level.txt
+writing dependency_links to Epidemic_Threshold.egg-info/dependency_links.txt
+reading manifest file 'Epidemic_Threshold.egg-info/SOURCES.txt'
+reading manifest template 'MANIFEST.in'
+writing manifest file 'Epidemic_Threshold.egg-info/SOURCES.txt'
+running build_ext
+copying build/lib.macosx-10.6-x86_64-2.7/threshold/utilc.so -> threshold
+test_comput (tests.1.myTest) ... threshold: 0.045617
+ok
+test_upload (tests.1.myTest) ... ok
+test_comput (tests.cython.myTest) ... threshold with CYTHON: 0.045945
+ok
+```
+* execute `python setup.py install`
+
+## Cython
+Some functions exists both in pure Python and in [Cython](http://cython.org/). Cython translates these functions into C, greatly increasing peformance. When installing, the program tries to understand if you have what Cython needs (the Cython module, a C compiler) and if so, you will have both versions: pure Python and C. If you do not have what Cython needs, the program will install only the Python versions. A keyword in `threshold.threshold.threshold.compute` will let you choose between Python and Cython. You should choose `cython=False` if you want something more numerically stable, more versatile (only unweighted computation is implemented in Cython). You should choose `cython=True` if your concern is performance (large networks, and/or little time available).
 
 
-## Required external modules
-- `numpy`
-- `scipy`
-- `networkx`
-- `pandas` (for `threshold_util.py`)
+# Load
 
-Run `test_system.py` to check if you have everything you need.
-
-# Overview
-
-The package consists of two objects: the class `tnet` for uploading and managing the temporal network, and the class `threshold`, for the actual computation of the threshold.
-
-## import 
-
-The directory containing `threshold.py` must be in your Python search path. You can temporarily add it using
+At the beginning of your script, load the libraries like this:
 
 ```python
-from sys import path
-path.append('<dir to threshold.py>')
+import threshold.threshold as thr
+import threshold.threshold_util as thu
 ```
 
-Then actually import the module as, for instance,
+# Content
+Module `threshold.threshold` contains two main classes:
+
+* `tnet` (handles temporal networks),
+* `threshold` (computes the threshold).
+
+Module `threshold.threshold_util` contains some useful functions for converting formats. At this stage, it contains
+
+* `DataFrame_to_lA` (from `pandas.DataFrame` to a list of `scipy.sparse.csr_matrix`),
+* `DataFrame_to_lG` (from `pandas.DataFrame` to a list of `networkx.Graph` or `networkx.DiGraph`).
+
+## `tnet`
+
+The constructor has only one compulsory argument: `thr.tnet(my_network)`.
+
+`my_network` can be
+
+* **a path to a text file** containing the whole edge list. First two columns represent edges' origin and destination, while last column is the time stamp. Time stamps are assumed to be integers from 0. If there are more than 3 columns, then 3rd column is interpreted as edge weight. Further columns between the 3rd and the last (time) are disregarded. Default separator is `\t`; different separators (e.g. `separator=','`) can be input via the optional keyword `separator` in the `tnet` constructor. By default the edge list is assumed undirected; this can be changed via the optional keyword `directed` in the `tnet` constructor.
+* a **list of `networkx.Graph` or `networkx.DiGraph` objects**. If the network is weighted, weights must be assigned to edges as `weight` keywords.
+
+Other optional keywords of the `thr.tnet` constructor are
+
+* `period` (default `None`): if not `None`, will override the computation of the period resulting from the input, by taking the first `period` snapshots. For example, if `my_network` is a list of 20 `networkx.Graph` snapshots, and `period=15`, then the last 5 snapshots are discarded. If the specified `period` is longer than the period of the dataset, you will get an `AssertionError`.
+* `dtype` (default `float128`): it is a `str` argument. Set it to `float64` if you really want to use 64-bit floating point numbers. Any other value of `dtype`, including the default one, will lead to using 128-bit floating points.
+* `attributes` (default `None`): `None`, or a `dict` with node IDs as keys, and arbitrary node attributes as attributes.
+
+`thr.tnet` has the following members, accessible through `@property` decorator syntax (some them can be manually set):
+
+* `lA`: list of `scipy.sparse.csr_matrix` adjacency matrices,
+* `lG`: list of `networkx` graphs,
+* `weighted`: boolean,
+* `N`: number of nodes,
+* `T`: number of time steps. _It can be set_,
+* `nodelist`: list of all nodes
+* `attributes`: returns list of attributes, ordered as `nodelist`. _Can be set by providing a `dict`_,
+
+For instance this works
+```
+R = thr.tnet(my_network)
+print R.T # say we get 15
+R.T = 10 # set it to 10
+print R.T # now we get 10. The last 5 snapshots have been discarded.
+```
+
+If you try to set members other than the _settable_ ones, the program will simply tell you you can't do it.
+
+## `threshold`
+
+The constructor has again one compulsory argument: `thr.threshold(my_network)`, where `my_network` can be
+
+* A `tnet` object,
+* A list of `scipy.sparse.csr_matrix` objects.
+
+Other keyword arguments:
+
+* `eval_max=20000, tol=1e-6, store=10`: parameters of the _modified power methods_
+* `additional_time` (default 0): It allows to add an arbitrary number of empty snapshots (empty means no edges in them). This is a convenient way to do it, as the order of empty snapshots inside the sequence does not matter.
+* `weighted` (default `None`). **This is important**: the meaning of `weighted` is different in `thr.tnet` and in `thr.threshold`. In the former it means if the edges have weights or not. In the latter it refers to the way the infection propagator is computed. When `weighted=False` in `threshold`, the _t_-th term in the infection propagator is $1-\mu + \lambda A(t)$ regardless of the nature of $A(t)$, which is itself binary if `tnet.weighted` is `False`, or real-valued otherwise. If `threshold.weighted` is instead `True`, then binomial transmission is assumed, so that the _t_-th term in the infection propagator is $1-\mu + [1-(1-\lambda)^E(t)]$, with $E(t)$ being the entry-wise exponential of $A(t)$. Hence, when `tnet.weighted` is `False`, the result is the same regardless of `threshold.weighted`. However, the algorithm is **much** faster when `threshold.weighted` is `False`. Despite the difference between `weighted` in the two classes, if `my_network` is a `tnet` object and `weighted=None`, then `thr.threshold` will inherit the `weighted` attribute from `my_network`. `weighted=True/False` overrides the inheritance. If `my_network` is a list of matrices, `weighted` must be **explicitly** set to either `True` or `False`. **If all this gives you headache, always set `weighted=False` in `thr.threshold`.**
+* `convergence_on_eigenvector` (default `True`) check the convergence of the algorithm on the stability of the eigenvector, rather than the eigenvalue (recommended).
+* `attributes` (default `None`): see `tnet`. Inherited from `tnet` when applicable.
+* `cython` (default `False`): in addition to pure Python, the _power method_ algorithm is implemented in [Cython](http://cython.org/), in order to make it faster. **Cython requires a C compiler, which must be present on your machine**.
+
+This class hass many methods/variables (`@property` style) you can access and (sometimes) set. They are (when not explained, similar to `tnet`'s, or repetitions of the keywords of the constructor)
+
+* `N`
+* `T`
+* `avg_k`: time average of the average degree of the snapshots
+* `avg_A`: time-averaged adjacency matrix
+* `avg_sr`: spectral radius of the time-averaged adjacency matrix
+* `weighted`
+* `convergence_on`
+* `eval_max`, `tol`, `store`
+* `additional_time`
+* `lA`
+* `l_indptr`, `l_indices`, `l_data`, `l_place` (see doc of `scipy.sparse.csr_matrix` for some of them)
+
+`thr.threshold` has two methods:
+
+### `thr.threshold.compute`
+This function computes the threshold, using optimization algorithms in [`scipy.optimize`](https://docs.scipy.org/doc/scipy/reference/optimize.html). It needs one compulsory argument: `mu`.
+`mu` can be either a (floating point) number, in which case it is interpreted as the recovery probability, or a `dict`. This `dict` must have attributes as keys (the same node attributes of the network), pointing to their corresponding values of recovery probability. This implements **heterogeneous recovery rates**. Optional keyword arguments are
+
+* `vmin` ( default 1e-3), `vmax` (default 1) : range of transmissibility in which to look for the threshold
+* `root_finded` (default 'brentq'). It can be either 'brentq' or 'bisect'
+* `maxiter` (default 50) and arguments inherited from `thr.threshold.__init__`: see documentation of `scipy.optimize`
+
+### `thr.threshold.sr_point`
+Computes one point of the spectral radius. Its arguments are
+
+* transmissibilty
+* `mu` (see above)
+* other optional keywords (see above)
+
+
+
+# Minimal example
 
 ```python
-import threshold as thr # main module
-import threshold_util as thu # additional utils
+# import threshold modules
+import threshold.threshold as thr
+import threshold.threshold_util as thu
+
+# import additional modules
+import networkx as nx
+import numpy as np
+
+# create a sequence of ER random graphs
+N,T = 500,400
+lG = []
+for t in range(T):
+    lG.append(nx.gnm_random_graph(N,N))
+
+# load it as a tnet object, and print
+R = thr.tnet(lG)
+print R
+
+# threshold object, and print
+Z = thr.threshold(R)
+print Z
+
+# compute the threshold
+mu = 0.01
+lc = Z.compute(mu,vmin=0.003,vmax=0.005)
+print mu, lc
+
 ```
 
-## `tnet`: manage your temporal network
-
-Class `tnet` is able to load a temporal network given in different formats:
-
-- path to a text file containing the whole edge list. First two columns represent edges' origin and destination, while last column is the time stamp. Time stamps are assumed to be integers from 0. If there are more than 3 columns, then 3rd column is interpreted as edge weight. Further columns between the 3rd and the last (time) are disregarded. Default separator is `\t`; different separators (e.g. `separator=','`) can be input via the optional keyword `separator` in the `tnet` constructor. By default the edge list is assumed undirected; this can be changed via the optional keyword `directed` in the `tnet` constructor.
-- (Python) list of networkx `Graph` or `DiGraph` objects. If the network is weighted, weights must be assigned to edges as `weight` keywords.
-
-The network can then be loaded in class `tnet` as follows:
-
-`R = thr.tnet(my_network)`
-
-
-### Arguments for `tnet`, with their default values
-
-- `my_network`: where to look for the network, according to supported formats (see above);
-- `period = None`: set period like this, if only a part of the network is to be used, up to period `T` (less than the one inferred from time stamps);
-- `dtype = 'float128'`: the bit length of the used float. 'float128' is the default because it is often needed. Every string that is not `'float64'` is interpreted as `'float128'`.
-
-##### other optional keywords
-- `directed`: it may be used when loading from text file. If `directed=True`, then the edge list is assumed to be directed. If not specified, treated as `directed=False`. When loading from a list of `networkx` graphs, it inherits from them the fact of being (un)directed.
-- `attributes=None`: with this keyword you can provide a dictionary for assigning node attributes. Imagine your nodes are people, you could set `attributes={'id1':'male','id2':'female'}`. The dictionary does not have to be exhaustive. Nodes without attribute are allowed.
-- `separator`: it may be used when loading from text file, to specify the separator. If not specified, treated as `separator='\t'`.
-
-### Attributes
-|  name  |  description |
-|---|---|
-| `N`  |  number of nodes.  |
-| `T`  |  period. You can manually reduce it. It will drop the time steps in excess from the end.  |
-| `weighted`  |  `True/False`  |
-| `lG`  |  list of `networkx` graphs  |
-| `lA`  |  list of adjacency matrices in `scipy.sparse.csr_matrix` format  |
-| `attributes`  |  node attributes  |
-| `nodelist`  |  list of nodes  |
-
-
-## `threshold`: compute the threshold
-
-Intstantiate a `threshold` object like this:
-
-```python
-myth = th.threshold(X)
-```
- Where `X` can be either a `tnet` object or a `list` of adjacency matrices in `scipy.sparse.csr_matrix`. Additional optional arguments are
- 
-##### related to power method:
- 
- - `eval_max=20000`: maximum number of eigenvalue evaluations.
- - `tol=1e-6` : tolerance for power method convergence.
- - `store=10` : number of eigenvector(value) values to use to check convergence.
- - `convergence_on_eigenvector=True`. If `True` uses the algorithm that checks convergence on the L1 norm of the principal eigenvector (probably more accurate). If `False`, checks the convergence of the eigenvalue estimate itself.
-
-##### related to the temporal network:
- 
- - `weighted=None`. You have to specify it when you provide a list of adjacency matrices instead of a `tnet` object. You can specify it also with a `tnet` object if you want to override the `.weighted` attribute of the `tnet` object. If the network itself is weighted, you still can set `weighted=False` here. It simply means it multiplies transmissibility directly to the adjacency matrices. To know more about weights, read [this article](http://epjb.epj.org/articles/epjb/abs/2015/12/b150620/b150620.html). `weighted=False` is more time-efficient than `weighted=True`.
- - `attributes=None`. It is ignored when `X` is a `tnet` object, as it will inherit the attributes from `X`. When `X` is a list of matrices, you can use this to provide a **`list`** of length `N` containing the attribute of each node. If you do not wish to set an attribute for node `i`, put `None` in the `list` at place `i`.
-
-You can access and edit `eval_max`,  `tol`, `store` and `weighted` as class attributes.
-
-The class has also the attribute `convergente_on` which is either `eigenvector` or `eigenvalue`. You can access it and edit it.
-
-For instance:
-
-``` python
-myth.tol = 1e-5
-myth.convergence_on = 'eigenvalue'
-```
-
-The class has the attribute `lA` which is the list of adjacency matrices. You can access it and set it safely.
-
-Finally, the attribute `avg_k` returns the average (weighted) degree of the network, i.e., `\frac{\sum_{t=1}^T\sum_{i,j}A_{t,ij}}{NT}`
-
-### `compute` method
-
-This carries out the actual computation of the threshold.
-
-```python
-x = th.compute(mu, vmin=1e-3, vmax=1, maxiter=50, root_finder='brentq', **kwargs)
-```
-
-- `mu` is the only compulsory argument. It can be either a single value (recovery probability) or a dictionary having a recovery probability for every attribute: `{'attr 1': 0.1, 'attr 2': 0.3, 'default':0.6}`. It must always have a 'default' value, which will be assigned to nodes with no attribute.
-- `vmin` and `vmax` are the boundaries of the intervals in which to look for the threshold.
-- `maxiter` is the maximum number of iterations of the root finding algorithm.
-- `root_finder` can be either `'brentq'` or `'bisect'`, referring to the functions in `scipy.optimize`. For further details see, for instance, [scipy documentation]( http://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.brentq.html#scipy.optimize.brentq ).
-- Other keyword arguments are directly sent to the root finding scipy function (e.g. `xtol` and `rtol`).
 
 ## `threshold_util`
 

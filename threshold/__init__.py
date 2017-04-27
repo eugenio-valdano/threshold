@@ -1,4 +1,9 @@
 import threshold
 import threshold_util
 import utilp
-import utilc
+
+# silently ignore cython if no cython module is there
+try:
+    import utilc
+except ImportError:
+    pass

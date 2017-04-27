@@ -11,12 +11,13 @@ import traceback, logging
 
 
 # functions for computing the spectral radius
-from utilp import psr1uw, psr1w, psr2uw, psr2w, ThresholdError
+from utilp import psr1uw, psr1w, psr2uw, psr2w, psr2uw_agg, ThresholdError
 try:
     from utilc import psr2uw as psr2uw_c
 except ImportError:
-    warn('CYTHON CANNOT BE IMPORTED!')
-    #psr2uw_c = psr2uw
+    warn('CYTHON CANNOT BE IMPORTED. Every cython function will be silently replaced with a pure python one.')
+    psr2uw_c = None
+    # When called, it is silently substituted by a pure python one
 
 
 def lA_to_ars(lA):
@@ -403,7 +404,7 @@ class threshold(object):
         self.cython = cython
 
         ###
-        if self.cython:
+        if self.cython and psr2uw_c is not None:
             self._f = lambda ladda, mu, sr_target : psr2uw_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
                                                              self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
         else:
