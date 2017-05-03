@@ -22,9 +22,7 @@ try:
           packages=find_packages(),
           test_suite="tests",
           install_requires=[i.strip() for i in open("requirements.txt").readlines()],
-          # test_requires=["unittest"],
           data_files=[('tests/', ['tests/*.csv'])],
-          #ext_modules=cythonize(["threshold/utilc.pyx"]),
           **cython_args
           )
 except:
@@ -42,8 +40,6 @@ except:
           packages=find_packages(),
           test_suite="tests",
           install_requires=[i.strip() for i in open("requirements.txt").readlines()],
-          # test_requires=["unittest"],
           data_files=[('tests/', ['tests/*.csv'])],
-          # ext_modules=cythonize(["threshold/utilc.pyx"]),
           )
 
