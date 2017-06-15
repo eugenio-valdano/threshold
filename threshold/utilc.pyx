@@ -6,7 +6,7 @@ ctypedef long double mydouble
 ctypedef long myint
 
 # @cython.boundscheck(False)
-cpdef mydouble psr2uw(mydouble ladda, mydouble mu, int [:] lip, int [:] li, mydouble [:] ld, int [:] lp, myint N, myint T, myint valumax, mydouble tolerance, myint store, mydouble sr_target):
+cpdef mydouble psr2uw(mydouble ladda, mydouble [:] mu, int [:] lip, int [:] li, mydouble [:] ld, int [:] lp, myint N, myint T, myint valumax, mydouble tolerance, myint store, mydouble sr_target):
     """
     lip: indptr
     li: indices
@@ -48,7 +48,7 @@ cpdef mydouble psr2uw(mydouble ladda, mydouble mu, int [:] lip, int [:] li, mydo
             i = 0
             while i<N:
                 # diagonal
-                v2[i] = (1.-mu)*v[i]
+                v2[i] = (1.-mu[i])*v[i]
 
                 # multiply
                 a = lip[i+tau*(N+1)]

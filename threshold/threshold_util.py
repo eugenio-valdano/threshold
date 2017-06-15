@@ -10,7 +10,9 @@ import networkx as nx
 import numpy as np
 from scipy.sparse import csr_matrix, coo_matrix
 
-def DataFrame_to_lG(df, directed=False, source='source', target='target', time='time', weight=None):
+def DataFrame_to_lG(df2, directed=False, source='source', target='target', time='time', weight=None):
+
+    df = df2.astype({source:str, target:str}).copy()
     
     ti, tf = df[time].min(), df[time].max()+1
     

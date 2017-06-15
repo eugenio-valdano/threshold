@@ -205,7 +205,7 @@ class tnet(object):
     def lA(self):
         if not hasattr(self,'_lA'):
             self._lA = graph_to_csr(self._lG, self._dtype, self._nodelist)
-        return self._lA
+        return [A.copy() for A in self._lA]
         
     @lA.setter
     def lA(self,value):
@@ -420,10 +420,13 @@ class threshold(object):
     def compute(self, mu2, vmin=0.001, vmax=1., maxiter=50, root_finder='brentq', **kwargs):
         
         # recovery rate(s)
+        mu = np.zeros((self._N,), dtype=self._dtype)
         if type(mu2) == dict:
             # heterogeneous mu
             assert hasattr(self,'_attributes'), 'No attributes given.'
-            mu = np.full((self._N,), mu2['default'], dtype=self._dtype)
+            mu[:] = mu2['default']
+            #mu = np.full((self._N,), mu2['default'], dtype=self._dtype)
+            #mu[:] = mu2['default']
             for i in range(self._N):
                 if self._attributes[i] is not None:
                     mu[i] = mu2[self._attributes[i]]
@@ -432,7 +435,8 @@ class threshold(object):
             
         else:
             # homogeneous mu
-            mu = mu2
+            #mu = mu2
+            mu[:] = mu2
         
         if root_finder.upper() == 'BRENTQ':
             findroot = brentq
@@ -478,7 +482,26 @@ class threshold(object):
     # Compute spectral radius in specific point
     # additional kwargs (like xtol or rtol) will be passed directly to the root finding routine. See scipy documentation
     def sr_point(self, ladda, mu2, maxiter=50, **kwargs):
-        
+
+        mu = np.zeros((self._N,), dtype=self._dtype)
+        if type(mu2) == dict:
+            # heterogeneous mu
+            assert hasattr(self, '_attributes'), 'No attributes given.'
+            mu[:] = mu2['default']
+            # mu = np.full((self._N,), mu2['default'], dtype=self._dtype)
+            # mu[:] = mu2['default']
+            for i in range(self._N):
+                if self._attributes[i] is not None:
+                    mu[i] = mu2[self._attributes[i]]
+
+            assert self._addtime == 0, 'You cannot give additional time when mu is heterogeneous'
+
+        else:
+            # homogeneous mu
+            # mu = mu2
+            mu[:] = mu2
+
+        """
         # recovery rate(s)
         if type(mu2) == dict:
             # heterogeneous mu
@@ -492,6 +515,7 @@ class threshold(object):
         else:
             # homogeneous mu
             mu = mu2
+        """
             
         if self._addtime == 0:
             sr_target = 1.
