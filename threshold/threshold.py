@@ -448,7 +448,8 @@ class threshold(object):
         if self._addtime == 0:
             sr_target = 1.
         else:
-            sr_target = np.power( 1.-mu, -float(self._addtime)/float(self.T) )
+            # Here mu must be homogeneous (see previous assertion), so I take just the first value.
+            sr_target = np.power( 1.-mu[0], -float(self._addtime)/float(self.T) )
             
         # compute threshold, and try all possible errors
         try:
@@ -472,11 +473,13 @@ class threshold(object):
             
         # catch any other exception
         except Exception as ecc:
+            print ecc
             logging.error(traceback.format_exc())
             result = np.nan
 
-        finally:        
-            return result
+        #finally:
+        #    return result
+        return result
             
             
     # Compute spectral radius in specific point
@@ -520,7 +523,8 @@ class threshold(object):
         if self._addtime == 0:
             sr_target = 1.
         else:
-            sr_target = np.power( 1.-mu, -float(self._addtime)/float(self.T) )
+            # here mu must be homogeneous (see previous assertion), so I take just the first value
+            sr_target = np.power( 1.-mu[0], -float(self._addtime)/float(self.T) )
 
            
         try:
