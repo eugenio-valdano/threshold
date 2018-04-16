@@ -192,7 +192,8 @@ class tnet(object):
             ct += 1
             if ct==self.T:
                 assert False, 'Empty network: no edges at any time.'
-        if 'weight' in self._lG[ct].edges(data=True)[0][2] : 
+        dweight = nx.get_edge_attributes(self._lG[ct],'weight')
+        if len(dweight)>0 :
             self._weighted = True
         else:
             self._weighted = False
