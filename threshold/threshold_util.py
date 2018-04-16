@@ -28,7 +28,7 @@ def DataFrame_to_lG(df2, directed=False, source='source', target='target', time=
         if cut.shape[0]==0:
             G = graph()
         else:
-            G = nx.from_pandas_dataframe(cut, source=source, target=target, edge_attr=weight, create_using=graph())
+            G = nx.from_pandas_edgelist(cut, source=source, target=target, edge_attr=weight, create_using=graph())
         
         lG.append(G)
         
